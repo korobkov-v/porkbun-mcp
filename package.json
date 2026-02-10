@@ -1,0 +1,39 @@
+{
+  "name": "porkbun-mcp",
+  "version": "0.3.0",
+  "description": "MCP server for Porkbun, npx-first runtime.",
+  "type": "module",
+  "bin": {
+    "porkbun-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "docs",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js"
+  },
+  "keywords": [
+    "mcp",
+    "porkbun",
+    "dns",
+    "domain"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.17.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}
