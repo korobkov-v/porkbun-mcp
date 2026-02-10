@@ -1,23 +1,47 @@
 # porkbun-mcp
 
-An MCP server for Porkbun that runs in a Node.js world (`npx`), not `uvx`.
+![porkbun-mcp logo](./porkbun-mcp-logo.png)
 
-No magic. No hidden sync jobs. Just API calls to Porkbun for domains, DNS, DNSSEC, SSL, and pricing.
+MCP server for Porkbun domains and DNS.
 
-## What This Project Is
+Use it from any MCP-compatible client to inspect and manage:
+- domains and nameservers
+- DNS records
+- DNSSEC
+- SSL certificate bundle
+- URL forwarding
 
-- A practical port of [`major/porkbun-mcp`](https://github.com/major/porkbun-mcp)
-- Same goal: let AI tools operate your Porkbun account through MCP
-- Different runtime: `npx porkbun-mcp`
+Built for safe operations:
+- read-only behavior by default
+- mutating tools require explicit write mode
+- scenario tools default to `dry_run: true`
 
-## Quick Start
+## Why This Exists
+
+Porkbun operations are often repetitive and risky under time pressure.
+This project exposes Porkbun APIs as MCP tools so AI assistants can execute domain workflows consistently and with guardrails.
+
+## 3-Minute Setup
+
+### 1) Prerequisites
+
+- Node.js `>=20`
+- Porkbun API credentials:
+  - `PORKBUN_API_KEY`
+  - `PORKBUN_SECRET_KEY`
+- In Porkbun panel, the target domain must be marked as API accessible ("available via API").
+  Account-level keys are not enough if domain-level API access is disabled.
+
+Install dependencies locally (for development):
 
 ```bash
 npm install
 npm run build
 ```
 
-Run in read-only mode (default behavior):
+### 2) Quick local run (stdio)
+
+Read-only mode:
 
 ```bash
 PORKBUN_API_KEY=your_key \
@@ -34,7 +58,15 @@ PORKBUN_GET_MUDDY=true \
 node dist/index.js --get-muddy
 ```
 
-## MCP Client Config (`npx`)
+### 3) Verify CLI wiring
+
+```bash
+node dist/index.js --help
+```
+
+## MCP Client Config (npx)
+
+Use this in your MCP client config:
 
 ```json
 {
@@ -51,17 +83,41 @@ node dist/index.js --get-muddy
 }
 ```
 
-Never commit real API keys to git. Keep credentials only in local environment variables or secret stores.
+Write mode with `npx`:
 
-## NOTE
+```json
+{
+  "mcpServers": {
+    "porkbun-mcp": {
+      "command": "npx",
+      "args": ["-y", "porkbun-mcp", "--get-muddy"],
+      "env": {
+        "PORKBUN_API_KEY": "your_porkbun_api_key",
+        "PORKBUN_SECRET_KEY": "your_porkbun_secret_api_key",
+        "PORKBUN_GET_MUDDY": "true"
+      }
+    }
+  }
+}
+```
 
-Porkbun API keys are account-level, but domain actions still depend on each domain's API access setting in Porkbun.  
-If a domain is set to no API access, write calls will fail even if your keys are valid.
+## First Successful Call
 
-## WARNING
+Once configured in your MCP client, start with:
+- `ping`
+- `pricing_get`
 
-Write mode is intentionally not default.  
-If you enable `--get-muddy`, treat your MCP client as production access to DNS and domain settings.
+Then try one read flow:
+- `dns_list` for your domain
+
+Before any write call, run a scenario tool in `dry_run` mode first.
+
+## Safety Model
+
+- Write actions are blocked unless `--get-muddy` or `PORKBUN_GET_MUDDY=true` is set.
+- Scenario tools are designed to plan before apply.
+- Destructive tools include explicit limits and confirmations.
+- API credentials are account-level. Domain-level API permissions in Porkbun still apply.
 
 ## Environment Variables
 
@@ -81,17 +137,13 @@ If you enable `--get-muddy`, treat your MCP client as production access to DNS a
 
 ## Tool Coverage
 
-- Connectivity and account: `ping`, `pricing_get`
+- Connectivity: `ping`, `pricing_get`
 - Domains: list, nameservers, URL forwarding, glue, availability
-- DNS records: list/get/create/edit/delete (including by name/type helpers)
+- DNS: list/get/create/edit/delete (including by name/type)
 - DNSSEC: list/create/delete
-- SSL: retrieve certificate bundle
+- SSL: certificate bundle retrieval
 
-## Scenario Tool Profiles
-
-Separate documentation for higher-level workflow tools:
-
-Implemented now:
+Scenario tools:
 - `dns_query`
 - `dns_upsert`
 - `domain_health_check`
@@ -100,11 +152,9 @@ Implemented now:
 - `domain_cutover_web`
 - `dns_batch_apply`
 
-See: [`docs/scenario-tools.md`](docs/scenario-tools.md)
+Detailed docs: [`docs/scenario-tools.md`](docs/scenario-tools.md)
 
-## Scenario Tool Examples
-
-The examples below show tool input payloads.
+## Practical Examples
 
 `dns_query` by record id:
 
@@ -117,19 +167,7 @@ The examples below show tool input payloads.
 }
 ```
 
-`dns_query` by type/subdomain:
-
-```json
-{
-  "domain": "example.com",
-  "selector": {
-    "type": "A",
-    "subdomain": "www"
-  }
-}
-```
-
-`dns_upsert` plan-only:
+`dns_upsert` plan mode:
 
 ```json
 {
@@ -146,89 +184,6 @@ The examples below show tool input payloads.
 }
 ```
 
-`dns_remove` with deletion limit:
-
-```json
-{
-  "domain": "example.com",
-  "selector": {
-    "type": "TXT",
-    "subdomain": "_acme-challenge"
-  },
-  "max_delete": 2,
-  "dry_run": true
-}
-```
-
-`domain_health_check` targeted checks:
-
-```json
-{
-  "domain": "example.com",
-  "checks": ["dns", "dnssec", "ssl"]
-}
-```
-
-`domain_redirect_ensure` merge mode:
-
-```json
-{
-  "domain": "example.com",
-  "desired": [
-    {
-      "subdomain": "",
-      "location": "https://www.example.com",
-      "type": "permanent",
-      "include_path": true
-    }
-  ],
-  "strategy": "merge",
-  "dry_run": true
-}
-```
-
-`domain_redirect_ensure` replace mode (apply):
-
-```json
-{
-  "domain": "example.com",
-  "desired": [
-    {
-      "subdomain": "",
-      "location": "https://www.example.com",
-      "type": "permanent",
-      "include_path": true
-    }
-  ],
-  "strategy": "replace",
-  "confirm_replace": true,
-  "dry_run": false
-}
-```
-
-`domain_cutover_web` pre-cutover plan:
-
-```json
-{
-  "domain": "example.com",
-  "target_records": [
-    {
-      "type": "A",
-      "subdomain": "",
-      "content": "198.51.100.42"
-    },
-    {
-      "type": "CNAME",
-      "subdomain": "www",
-      "content": "example.com"
-    }
-  ],
-  "pre_cutover_ttl": 300,
-  "verify": true,
-  "dry_run": true
-}
-```
-
 `dns_batch_apply` plan:
 
 ```json
@@ -240,41 +195,38 @@ The examples below show tool input payloads.
       "subdomain": "",
       "content": "198.51.100.42",
       "ttl": 300
-    },
-    {
-      "type": "CNAME",
-      "subdomain": "www",
-      "content": "example.com",
-      "ttl": 300
     }
   ],
   "mode": "plan",
   "strategy": "merge",
-  "max_changes": 10
-}
-```
-
-`dns_batch_apply` execute:
-
-```json
-{
-  "domain": "example.com",
-  "desired_records": [
-    {
-      "type": "A",
-      "subdomain": "",
-      "content": "198.51.100.42",
-      "ttl": 300
-    }
-  ],
-  "mode": "apply",
-  "strategy": "merge",
-  "confirm_apply": true,
   "max_changes": 5
 }
 ```
 
-## Why The Tone Is Different
+## Security Notes
 
-Porkbun docs are direct and operator-focused: short steps, explicit notes/warnings, and minimal ceremony.  
-This README follows that same pattern so setup is obvious and mistakes are harder to make.
+- Never commit real API keys to git.
+- Prefer local environment variables or a secret manager.
+- Treat write mode as production access.
+
+## Development
+
+```bash
+npm install
+npm run build
+```
+
+Run locally:
+
+```bash
+npm run dev
+```
+
+## Contributing
+
+Contributions are welcome.
+Read [`CONTRIBUTING.md`](CONTRIBUTING.md) before opening a PR.
+
+## License
+
+MIT
