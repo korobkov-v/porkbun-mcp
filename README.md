@@ -1,6 +1,6 @@
 # porkbun-mcp
 
-![porkbun-mcp logo](./porkbun-mcp-logo.png)
+![porkbun-mcp logo](./porkbun-mcp_logo.png)
 
 MCP server for Porkbun domains and DNS.
 
