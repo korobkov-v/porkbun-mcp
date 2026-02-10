@@ -135,6 +135,18 @@ Before any write call, run a scenario tool in `dry_run` mode first.
 - `--ipv4-only-api`
 - `--help`
 
+## What `--get-muddy` Means
+
+`--get-muddy` enables write mode.
+
+Without it, the server stays in safe read-only behavior.
+With it, mutating tools are allowed (create/edit/delete/update operations for DNS and domain settings).
+
+Use this mode only when:
+- you are ready to apply real infrastructure changes
+- your domain is API-enabled in Porkbun
+- you have already validated the plan with read calls or `dry_run` flows
+
 ## Tool Coverage
 
 - Connectivity: `ping`, `pricing_get`
