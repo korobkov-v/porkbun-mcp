@@ -32,6 +32,14 @@ This project exposes Porkbun APIs as MCP tools so AI assistants can execute doma
 - In Porkbun panel, the target domain must be marked as API accessible ("available via API").
   Account-level keys are not enough if domain-level API access is disabled.
 
+Where to get the keys:
+- Log in to Porkbun.
+- Open account settings and go to API Access.
+- Generate/copy:
+  - `PORKBUN_API_KEY` (API Key)
+  - `PORKBUN_SECRET_KEY` (Secret API Key)
+- In the domain settings, ensure API access is enabled for each domain you want to manage.
+
 Install dependencies locally (for development):
 
 ```bash
@@ -93,8 +101,7 @@ Write mode with `npx`:
       "args": ["-y", "porkbun-mcp", "--get-muddy"],
       "env": {
         "PORKBUN_API_KEY": "your_porkbun_api_key",
-        "PORKBUN_SECRET_KEY": "your_porkbun_secret_api_key",
-        "PORKBUN_GET_MUDDY": "true"
+        "PORKBUN_SECRET_KEY": "your_porkbun_secret_api_key"
       }
     }
   }
@@ -124,14 +131,11 @@ Before any write call, run a scenario tool in `dry_run` mode first.
 - `PORKBUN_API_KEY` (required)
 - `PORKBUN_SECRET_KEY` (required)
 - `PORKBUN_GET_MUDDY` (optional)
-- `PORKBUN_API_BASE_URL` (optional)
 
 ## CLI Options
 
 - `--get-muddy`
 - `--transport stdio`
-- `--api-base-url <url>`
-- `--allow-unsafe-base-url` (only if you intentionally target a non-Porkbun endpoint)
 - `--ipv4-only-api`
 - `--help`
 
