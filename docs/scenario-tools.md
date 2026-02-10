@@ -205,7 +205,7 @@ Suggested input:
 Output:
 - `diff` (`create[]`, `edit[]`, `delete[]`, `noop[]`)
 - `apply_results[]` (for apply mode)
-- `failed[]`, `rollback_hints[]`.
+- `failed[]`.
 
 Guardrails:
 - Two-phase flow only: `plan` first, then `apply`.

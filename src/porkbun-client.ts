@@ -11,6 +11,7 @@ interface RequestOptions {
 }
 
 type EndpointPart = string | number | undefined | null;
+const REQUEST_TIMEOUT_MS = 30_000;
 
 export class PorkbunClient {
   private readonly apiKey: string;
@@ -309,13 +310,27 @@ export class PorkbunClient {
         }
       : payload;
 
-    const response = await fetch(`${this.baseUrl}/${endpoint}`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-      },
-      body: JSON.stringify(requestPayload),
-    });
+    let response: Response;
+    try {
+      response = await fetch(`${this.baseUrl}/${endpoint}`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(requestPayload),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        (error.name === "TimeoutError" || error.name === "AbortError")
+      ) {
+        throw new Error(
+          `Porkbun API request timed out after ${REQUEST_TIMEOUT_MS}ms (${endpoint}).`,
+        );
+      }
+      throw error;
+    }
 
     let body: unknown;
     try {

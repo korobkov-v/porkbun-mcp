@@ -51,6 +51,8 @@ node dist/index.js --get-muddy
 }
 ```
 
+Never commit real API keys to git. Keep credentials only in local environment variables or secret stores.
+
 ## NOTE
 
 Porkbun API keys are account-level, but domain actions still depend on each domain's API access setting in Porkbun.  
@@ -73,6 +75,7 @@ If you enable `--get-muddy`, treat your MCP client as production access to DNS a
 - `--get-muddy`
 - `--transport stdio`
 - `--api-base-url <url>`
+- `--allow-unsafe-base-url` (only if you intentionally target a non-Porkbun endpoint)
 - `--ipv4-only-api`
 - `--help`
 

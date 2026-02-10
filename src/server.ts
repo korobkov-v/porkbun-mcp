@@ -1,5 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import { domainToASCII } from "node:url";
 
 import type { RuntimeConfig } from "./config.js";
 import { PorkbunClient } from "./porkbun-client.js";
@@ -14,6 +15,8 @@ type HealthCheckStatus = "ok" | "warning" | "error";
 type HealthCheckName = "ns" | "dns" | "dnssec" | "ssl" | "forwards";
 type DnsBatchMode = "plan" | "apply";
 type ReconcileStrategy = "merge" | "replace";
+const DOMAINS_LIST_PAGE_SIZE = 1000;
+const DOMAINS_LIST_MAX_PAGES = 100;
 
 export function createPorkbunServer(config: RuntimeConfig): McpServer {
   const server = new McpServer({
@@ -41,6 +44,10 @@ export function createPorkbunServer(config: RuntimeConfig): McpServer {
     ) =>
     async (args: TArgs) => {
       try {
+        const maybeDomain = args.domain;
+        if (typeof maybeDomain === "string") {
+          assertValidDomain(maybeDomain);
+        }
         const data = await handler(args);
         return successResult(data);
       } catch (error) {
@@ -74,14 +81,19 @@ export function createPorkbunServer(config: RuntimeConfig): McpServer {
 
       const allDomains: unknown[] = [];
       let cursor = start;
-      for (;;) {
+      for (let pageIndex = 0; pageIndex < DOMAINS_LIST_MAX_PAGES; pageIndex += 1) {
         const page = await client.domainsListAll(cursor, includeLabels);
         const domains = Array.isArray(page.domains) ? page.domains : [];
         allDomains.push(...domains);
-        if (domains.length < 1000) {
+        if (domains.length < DOMAINS_LIST_PAGE_SIZE) {
           break;
         }
-        cursor += 1000;
+        cursor += DOMAINS_LIST_PAGE_SIZE;
+        if (pageIndex === DOMAINS_LIST_MAX_PAGES - 1) {
+          throw new Error(
+            `domains_list hit safety limit of ${DOMAINS_LIST_MAX_PAGES} pages.`,
+          );
+        }
       }
 
       return {
@@ -1646,4 +1658,31 @@ function readArrayLength(value: unknown): number {
 
 function toMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function assertValidDomain(domain: string): void {
+  const normalizedInput = domain.trim();
+  if (normalizedInput.length < 1 || normalizedInput.length > 253) {
+    throw new Error("Domain must be between 1 and 253 characters.");
+  }
+
+  const ascii = domainToASCII(normalizedInput).toLowerCase();
+  if (!ascii) {
+    throw new Error(`Invalid domain format: "${domain}".`);
+  }
+
+  const normalized = ascii.endsWith(".") ? ascii.slice(0, -1) : ascii;
+  const labels = normalized.split(".");
+  if (labels.length < 2) {
+    throw new Error(`Invalid domain format: "${domain}".`);
+  }
+
+  for (const label of labels) {
+    if (label.length < 1 || label.length > 63) {
+      throw new Error(`Invalid domain label length in "${domain}".`);
+    }
+    if (!/^[a-z0-9-]+$/.test(label) || label.startsWith("-") || label.endsWith("-")) {
+      throw new Error(`Invalid domain label "${label}" in "${domain}".`);
+    }
+  }
 }

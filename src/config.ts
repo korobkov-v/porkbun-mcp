@@ -7,6 +7,7 @@ export interface CliOptions {
   transport: "stdio";
   apiBaseUrl?: string;
   ipv4OnlyApi: boolean;
+  allowUnsafeBaseUrl: boolean;
 }
 
 export interface RuntimeConfig {
@@ -23,6 +24,7 @@ export function parseCliOptions(args: string[]): CliOptions {
     transport: "stdio",
     apiBaseUrl: undefined,
     ipv4OnlyApi: false,
+    allowUnsafeBaseUrl: false,
   };
 
   for (let index = 0; index < args.length; index += 1) {
@@ -68,6 +70,11 @@ export function parseCliOptions(args: string[]): CliOptions {
       continue;
     }
 
+    if (arg === "--allow-unsafe-base-url") {
+      options.allowUnsafeBaseUrl = true;
+      continue;
+    }
+
     throw new Error(`Unknown argument: ${arg}`);
   }
 
@@ -87,10 +94,11 @@ export function resolveRuntimeConfig(cli: CliOptions): RuntimeConfig {
   const getMuddy = cli.getMuddy || envGetMuddy;
 
   const envBaseUrl = process.env.PORKBUN_API_BASE_URL?.trim();
-  const baseUrl =
+  const baseUrlInput =
     cli.apiBaseUrl ??
     envBaseUrl ??
     (cli.ipv4OnlyApi ? IPV4_API_BASE_URL : DEFAULT_API_BASE_URL);
+  const baseUrl = validateApiBaseUrl(baseUrlInput, cli.allowUnsafeBaseUrl);
 
   return {
     apiKey,
@@ -110,6 +118,8 @@ Options:
   --get-muddy            Enable write tools
   --transport stdio      MCP transport
   --api-base-url <url>   Override Porkbun API base URL
+  --allow-unsafe-base-url
+                         Allow non-Porkbun API host for --api-base-url
   --ipv4-only-api        Use api-ipv4.porkbun.com endpoint
   -h, --help             Show this help
 
@@ -137,4 +147,30 @@ function toBoolean(value: string | undefined): boolean {
     default:
       return false;
   }
+}
+
+function validateApiBaseUrl(value: string, allowUnsafeBaseUrl: boolean): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new Error(`Invalid API base URL: "${value}".`);
+  }
+
+  if (parsed.protocol !== "https:") {
+    throw new Error("PORKBUN API base URL must use https://");
+  }
+
+  if (!allowUnsafeBaseUrl && !isTrustedPorkbunHost(parsed.hostname)) {
+    throw new Error(
+      "Refusing non-Porkbun API host for credentials safety. Use --allow-unsafe-base-url to override.",
+    );
+  }
+
+  return parsed.toString();
+}
+
+function isTrustedPorkbunHost(hostname: string): boolean {
+  const normalized = hostname.trim().toLowerCase();
+  return normalized === "api.porkbun.com" || normalized === "api-ipv4.porkbun.com";
 }
