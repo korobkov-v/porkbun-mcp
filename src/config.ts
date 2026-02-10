@@ -5,9 +5,7 @@ export interface CliOptions {
   help: boolean;
   getMuddy: boolean;
   transport: "stdio";
-  apiBaseUrl?: string;
   ipv4OnlyApi: boolean;
-  allowUnsafeBaseUrl: boolean;
 }
 
 export interface RuntimeConfig {
@@ -22,9 +20,7 @@ export function parseCliOptions(args: string[]): CliOptions {
     help: false,
     getMuddy: false,
     transport: "stdio",
-    apiBaseUrl: undefined,
     ipv4OnlyApi: false,
-    allowUnsafeBaseUrl: false,
   };
 
   for (let index = 0; index < args.length; index += 1) {
@@ -55,23 +51,8 @@ export function parseCliOptions(args: string[]): CliOptions {
       continue;
     }
 
-    if (arg === "--api-base-url") {
-      const value = args[index + 1];
-      if (!value) {
-        throw new Error("Missing value for --api-base-url.");
-      }
-      options.apiBaseUrl = value;
-      index += 1;
-      continue;
-    }
-
     if (arg === "--ipv4-only-api") {
       options.ipv4OnlyApi = true;
-      continue;
-    }
-
-    if (arg === "--allow-unsafe-base-url") {
-      options.allowUnsafeBaseUrl = true;
       continue;
     }
 
@@ -93,12 +74,7 @@ export function resolveRuntimeConfig(cli: CliOptions): RuntimeConfig {
   const envGetMuddy = toBoolean(process.env.PORKBUN_GET_MUDDY);
   const getMuddy = cli.getMuddy || envGetMuddy;
 
-  const envBaseUrl = process.env.PORKBUN_API_BASE_URL?.trim();
-  const baseUrlInput =
-    cli.apiBaseUrl ??
-    envBaseUrl ??
-    (cli.ipv4OnlyApi ? IPV4_API_BASE_URL : DEFAULT_API_BASE_URL);
-  const baseUrl = validateApiBaseUrl(baseUrlInput, cli.allowUnsafeBaseUrl);
+  const baseUrl = cli.ipv4OnlyApi ? IPV4_API_BASE_URL : DEFAULT_API_BASE_URL;
 
   return {
     apiKey,
@@ -117,9 +93,6 @@ Usage:
 Options:
   --get-muddy            Enable write tools
   --transport stdio      MCP transport
-  --api-base-url <url>   Override Porkbun API base URL
-  --allow-unsafe-base-url
-                         Allow non-Porkbun API host for --api-base-url
   --ipv4-only-api        Use api-ipv4.porkbun.com endpoint
   -h, --help             Show this help
 
@@ -127,7 +100,6 @@ Environment variables:
   PORKBUN_API_KEY        Required
   PORKBUN_SECRET_KEY     Required
   PORKBUN_GET_MUDDY      Optional (true/false)
-  PORKBUN_API_BASE_URL   Optional
 `;
 
   process.stdout.write(helpText);
@@ -149,28 +121,3 @@ function toBoolean(value: string | undefined): boolean {
   }
 }
 
-function validateApiBaseUrl(value: string, allowUnsafeBaseUrl: boolean): string {
-  let parsed: URL;
-  try {
-    parsed = new URL(value);
-  } catch {
-    throw new Error(`Invalid API base URL: "${value}".`);
-  }
-
-  if (parsed.protocol !== "https:") {
-    throw new Error("PORKBUN API base URL must use https://");
-  }
-
-  if (!allowUnsafeBaseUrl && !isTrustedPorkbunHost(parsed.hostname)) {
-    throw new Error(
-      "Refusing non-Porkbun API host for credentials safety. Use --allow-unsafe-base-url to override.",
-    );
-  }
-
-  return parsed.toString();
-}
-
-function isTrustedPorkbunHost(hostname: string): boolean {
-  const normalized = hostname.trim().toLowerCase();
-  return normalized === "api.porkbun.com" || normalized === "api-ipv4.porkbun.com";
-}
