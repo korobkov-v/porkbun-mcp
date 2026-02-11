@@ -230,6 +230,18 @@ Detailed docs: [`docs/scenario-tools.md`](docs/scenario-tools.md)
 }
 ```
 
+`domains_check_bulk`:
+
+```json
+{
+  "domains": ["example.com", "example.net", "example.org"],
+  "concurrency": 1,
+  "respect_limits": true,
+  "delay_ms": 11000,
+  "stop_on_rate_limit": true
+}
+```
+
 `dns_batch_apply` plan:
 
 ```json

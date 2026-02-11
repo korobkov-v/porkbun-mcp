@@ -17,11 +17,13 @@ type DnsBatchMode = "plan" | "apply";
 type ReconcileStrategy = "merge" | "replace";
 const DOMAINS_LIST_PAGE_SIZE = 1000;
 const DOMAINS_LIST_MAX_PAGES = 100;
+const DOMAINS_BULK_CHECK_MAX = 100;
+const DOMAINS_BULK_CHECK_FALLBACK_DELAY_MS = 11_000;
 
 export function createPorkbunServer(config: RuntimeConfig): McpServer {
   const server = new McpServer({
     name: "porkbun-mcp",
-    version: "0.3.1",
+    version: "0.3.2",
   });
 
   const client = new PorkbunClient({
@@ -183,6 +185,146 @@ export function createPorkbunServer(config: RuntimeConfig): McpServer {
       domain: z.string().min(1),
     },
     wrap(async (args) => client.domainsCheckAvailability(args.domain)),
+  );
+
+  server.tool(
+    "domains_check_bulk",
+    {
+      domains: z.array(z.string().min(1)).min(1).max(DOMAINS_BULK_CHECK_MAX),
+      concurrency: z.number().int().positive().max(10).optional(),
+      delay_ms: z.number().int().nonnegative().max(60_000).optional(),
+      respect_limits: z.boolean().optional(),
+      stop_on_error: z.boolean().optional(),
+      stop_on_rate_limit: z.boolean().optional(),
+    },
+    wrap(async (args) => {
+      const concurrency = args.concurrency ?? 1;
+      const delayMs = args.delay_ms ?? DOMAINS_BULK_CHECK_FALLBACK_DELAY_MS;
+      const respectLimits = args.respect_limits ?? true;
+      const stopOnError = args.stop_on_error ?? false;
+      const stopOnRateLimit = args.stop_on_rate_limit ?? true;
+
+      const domains = args.domains.map((d) => d.trim()).filter((d) => d.length > 0);
+      if (domains.length === 0) {
+        throw new Error("domains_check_bulk requires at least one non-empty domain.");
+      }
+      if (domains.length > DOMAINS_BULK_CHECK_MAX) {
+        throw new Error(
+          `domains_check_bulk supports up to ${DOMAINS_BULK_CHECK_MAX} domains per call.`,
+        );
+      }
+
+      // Validate all domains upfront so we fail fast on obvious input issues.
+      for (const domain of domains) {
+        assertValidDomain(domain);
+      }
+
+      const items = domains.map((domain) => ({ domain }));
+      const resultsByIndex: Array<
+        | {
+        domain: string;
+        ok: boolean;
+        error?: string;
+        response?: unknown;
+          }
+        | undefined
+      > = new Array(items.length).fill(undefined);
+
+      let aborted = false;
+      let nextIndex = 0;
+
+      const isRateLimitError = (message: string): boolean => {
+        const m = message.toLowerCase();
+        return m.includes("rate") && m.includes("limit");
+      };
+
+      const readLimitTtlMs = (payload: unknown): number | null => {
+        if (!isRecord(payload) || !isRecord(payload.limits)) {
+          return null;
+        }
+        const ttlRaw = payload.limits.TTL;
+        const seconds =
+          typeof ttlRaw === "number"
+            ? ttlRaw
+            : typeof ttlRaw === "string"
+              ? Number(ttlRaw)
+              : NaN;
+        if (!Number.isFinite(seconds) || seconds <= 0) {
+          return null;
+        }
+        // Cap to avoid extremely long sleeps on malformed payloads.
+        return Math.min(Math.floor(seconds * 1000), 60_000);
+      };
+
+      const sleep = async (ms: number): Promise<void> =>
+        new Promise((resolve) => setTimeout(resolve, ms));
+
+      const worker = async (): Promise<void> => {
+        for (;;) {
+          if (aborted) return;
+          const index = nextIndex;
+          nextIndex += 1;
+          if (index >= items.length) return;
+
+          const domain = items[index].domain;
+          try {
+            const response = await client.domainsCheckAvailability(domain);
+            resultsByIndex[index] = { domain, ok: true, response };
+
+            // Respect server-provided rate limit hints when available.
+            if (respectLimits) {
+              const limitDelay = readLimitTtlMs(response);
+              if (limitDelay !== null && limitDelay > 0) {
+                await sleep(limitDelay);
+                continue;
+              }
+            }
+          } catch (error) {
+            const message = toMessage(error);
+            resultsByIndex[index] = { domain, ok: false, error: message };
+
+            if (stopOnRateLimit && isRateLimitError(message)) {
+              aborted = true;
+              return;
+            }
+            if (stopOnError) {
+              aborted = true;
+              return;
+            }
+          }
+
+          if (delayMs > 0) {
+            await sleep(delayMs);
+          }
+        }
+      };
+
+      const workers = Array.from({ length: Math.min(concurrency, items.length) }, () =>
+        worker(),
+      );
+      await Promise.all(workers);
+
+      const results = resultsByIndex.filter(
+        (item): item is NonNullable<(typeof resultsByIndex)[number]> => item !== undefined,
+      );
+      const okCount = results.filter((r) => r.ok).length;
+      const errorCount = results.length - okCount;
+
+      return {
+        status: "SUCCESS",
+        count: domains.length,
+        concurrency,
+        delay_ms: delayMs,
+        respect_limits: respectLimits,
+        stop_on_error: stopOnError,
+        stop_on_rate_limit: stopOnRateLimit,
+        completed: results.length,
+        ok: okCount,
+        errors: errorCount,
+        aborted,
+        results,
+      };
+    }),
   );
 
   server.tool(

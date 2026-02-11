@@ -180,6 +180,32 @@ Output:
 Guardrails:
 - Avoid binary “healthy/unhealthy” without evidence lines.
 
+## `domains_check_bulk`
+
+Status:
+- Implemented.
+
+Purpose:
+- Check availability for a list of domains (batch wrapper around `domains_check_availability`).
+
+Why it exists:
+- Helps bulk-check shortlists while keeping a conservative request rate by default.
+
+Risk level:
+- Low (read-only).
+
+Suggested input:
+- `domains[]` (required)
+- `concurrency` (optional, default `1`)
+- `respect_limits` (optional, default `true`)
+- `delay_ms` (optional, default `11000`)
+- `stop_on_rate_limit` (optional, default `true`)
+- `stop_on_error` (optional, default `false`)
+
+Guardrails:
+- Hard limit of 100 domains per call.
+- Defaults to sequential behavior and reads `limits.TTL` from Porkbun responses when available.
+
 ## `dns_batch_apply`
 
 Status:
