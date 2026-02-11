@@ -23,7 +23,7 @@ const DOMAINS_BULK_CHECK_FALLBACK_DELAY_MS = 11_000;
 export function createPorkbunServer(config: RuntimeConfig): McpServer {
   const server = new McpServer({
     name: "porkbun-mcp",
-    version: "0.3.2",
+    version: "0.3.3",
   });
 
   const client = new PorkbunClient({
@@ -418,11 +418,30 @@ export function createPorkbunServer(config: RuntimeConfig): McpServer {
         return plan;
       }
 
-      const response = await client.domainsCreate({
-        domain: args.domain,
-        cost: args.cost,
-        agreeToTerms: "yes",
-      });
+      let response: unknown;
+      try {
+        response = await client.domainsCreate({
+          domain: args.domain,
+          cost: args.cost,
+          agreeToTerms: "yes",
+        });
+      } catch (error) {
+        const message = toMessage(error);
+        throw new Error(
+          [
+            message,
+            "",
+            "Porkbun API domain registration prerequisites (per official docs):",
+            "- Your account must have registered at least one domain in the past (new accounts may need to buy the first domain via the web UI).",
+            "- Your email address and phone number must be verified.",
+            "- You must have enough account credit (API registrations are billed from account credit).",
+            "- `cost` must be in pennies and must match the value returned by Domain Check (minimum duration * price).",
+            "- You must accept terms (this tool requires `agree_to_terms=true`).",
+            "",
+            "Docs: https://porkbun.com/api/json/v3/documentation",
+          ].join("\n"),
+        );
+      }
 
       return { ...plan, dry_run: false, response };
     }),

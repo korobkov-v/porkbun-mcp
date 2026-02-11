@@ -125,6 +125,16 @@ Domain create enabled (dangerous):
 }
 ```
 
+Important (Porkbun API domain registration prerequisites):
+- Your Porkbun account must have registered at least one domain in the past (for new accounts, the first purchase may need to be done via the web UI).
+- Your email address and phone number must be verified.
+- You must have enough account credit (API registrations are billed from account credit).
+- `cost` must be provided in pennies and must match the value returned by the domain check (minimum duration * price).
+- You must explicitly accept terms (`agree_to_terms=true` in this server, which maps to `agreeToTerms="yes"` for Porkbun).
+
+Reference:
+- Porkbun API v3 docs (see "Domain Create" and "Domain Check"): https://porkbun.com/api/json/v3/documentation
+
 ## First Successful Call
 
 Once configured in your MCP client, start with:

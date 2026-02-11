@@ -392,8 +392,22 @@ export class PorkbunClient {
     }
 
     if (!response.ok) {
+      // Porkbun often returns useful JSON "message" fields even on non-200 responses.
+      if (isRecord(body)) {
+        const status = typeof body.status === "string" ? body.status : "";
+        const message = typeof body.message === "string" ? body.message : "";
+        const details = message
+          ? ` ${message}`
+          : status
+            ? ` Porkbun status: ${status}`
+            : "";
+        throw new Error(
+          `Porkbun API request failed (HTTP ${response.status} ${response.statusText}).${details}`,
+        );
+      }
+
       throw new Error(
-        `Porkbun API request failed with HTTP ${response.status} ${response.statusText}.`,
+        `Porkbun API request failed (HTTP ${response.status} ${response.statusText}).`,
       );
     }
 
