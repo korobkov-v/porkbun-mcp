@@ -108,6 +108,23 @@ Write mode with `npx`:
 }
 ```
 
+Domain create enabled (dangerous):
+
+```json
+{
+  "mcpServers": {
+    "porkbun-mcp": {
+      "command": "npx",
+      "args": ["-y", "porkbun-mcp", "--get-muddy", "--enable-domain-create"],
+      "env": {
+        "PORKBUN_API_KEY": "your_porkbun_api_key",
+        "PORKBUN_SECRET_KEY": "your_porkbun_secret_api_key"
+      }
+    }
+  }
+}
+```
+
 ## First Successful Call
 
 Once configured in your MCP client, start with:
