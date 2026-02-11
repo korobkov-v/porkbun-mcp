@@ -107,8 +107,58 @@ export class PorkbunClient {
     return this.post(this.endpoint("domain", "checkDomain", domain));
   }
 
+  async domainsUpdateAutoRenew(args: {
+    status: "on" | "off";
+    domain?: string;
+    domains?: string[];
+  }): Promise<PorkbunApiResponse> {
+    const payload: Record<string, unknown> = { status: args.status };
+    if (args.domains && args.domains.length > 0) {
+      payload.domains = args.domains;
+    }
+    return this.post(this.endpoint("domain", "updateAutoRenew", args.domain), payload);
+  }
+
+  async domainsCreate(args: {
+    domain: string;
+    cost: number;
+    agreeToTerms: "yes" | "1";
+  }): Promise<PorkbunApiResponse> {
+    return this.post(this.endpoint("domain", "create", args.domain), {
+      cost: String(args.cost),
+      agreeToTerms: args.agreeToTerms,
+    });
+  }
+
   async domainsGetGlueRecords(domain: string): Promise<PorkbunApiResponse> {
     return this.post(this.endpoint("domain", "getGlue", domain));
+  }
+
+  async domainsCreateGlueRecord(
+    domain: string,
+    hostSubdomain: string,
+    ips: string[],
+  ): Promise<PorkbunApiResponse> {
+    return this.post(this.endpoint("domain", "createGlue", domain, hostSubdomain), {
+      ips,
+    });
+  }
+
+  async domainsUpdateGlueRecord(
+    domain: string,
+    hostSubdomain: string,
+    ips: string[],
+  ): Promise<PorkbunApiResponse> {
+    return this.post(this.endpoint("domain", "updateGlue", domain, hostSubdomain), {
+      ips,
+    });
+  }
+
+  async domainsDeleteGlueRecord(
+    domain: string,
+    hostSubdomain: string,
+  ): Promise<PorkbunApiResponse> {
+    return this.post(this.endpoint("domain", "deleteGlue", domain, hostSubdomain));
   }
 
   async dnsList(domain: string): Promise<PorkbunApiResponse> {

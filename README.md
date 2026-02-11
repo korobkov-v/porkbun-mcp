@@ -125,16 +125,22 @@ Before any write call, run a scenario tool in `dry_run` mode first.
 - Scenario tools are designed to plan before apply.
 - Destructive tools include explicit limits and confirmations.
 - API credentials are account-level. Domain-level API permissions in Porkbun still apply.
+- Domain registration (`domains_create`) is disabled by default. It requires:
+  - write mode (`--get-muddy`)
+  - explicit enable flag (`--enable-domain-create` or `PORKBUN_ENABLE_DOMAIN_CREATE=true`)
+  - `dry_run=false` + `confirm_apply=true` + `agree_to_terms=true`
 
 ## Environment Variables
 
 - `PORKBUN_API_KEY` (required)
 - `PORKBUN_SECRET_KEY` (required)
 - `PORKBUN_GET_MUDDY` (optional)
+- `PORKBUN_ENABLE_DOMAIN_CREATE` (optional, dangerous)
 
 ## CLI Options
 
 - `--get-muddy`
+- `--enable-domain-create` (dangerous)
 - `--transport stdio`
 - `--ipv4-only-api`
 - `--help`
@@ -154,7 +160,7 @@ Use this mode only when:
 ## Tool Coverage
 
 - Connectivity: `ping`, `pricing_get`
-- Domains: list, nameservers, URL forwarding, glue, availability
+- Domains: list, nameservers, URL forwarding, glue records (get/create/update/delete), availability
 - DNS: list/get/create/edit/delete (including by name/type)
 - DNSSEC: list/create/delete
 - SSL: certificate bundle retrieval
@@ -167,6 +173,13 @@ Scenario tools:
 - `domain_redirect_ensure`
 - `domain_cutover_web`
 - `dns_batch_apply`
+
+Beginner helpers:
+- `dns_audit`
+- `dns_setup`
+- `email_dns_setup`
+- `update_server_ip`
+- `subdomain_setup`
 
 Detailed docs: [`docs/scenario-tools.md`](docs/scenario-tools.md)
 

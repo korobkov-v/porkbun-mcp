@@ -21,7 +21,7 @@ const DOMAINS_LIST_MAX_PAGES = 100;
 export function createPorkbunServer(config: RuntimeConfig): McpServer {
   const server = new McpServer({
     name: "porkbun-mcp",
-    version: "0.3.0",
+    version: "0.3.1",
   });
 
   const client = new PorkbunClient({
@@ -34,6 +34,14 @@ export function createPorkbunServer(config: RuntimeConfig): McpServer {
     if (!config.getMuddy) {
       throw new Error(
         `${toolName} is disabled in read-only mode. Set PORKBUN_GET_MUDDY=true or pass --get-muddy.`,
+      );
+    }
+  };
+
+  const ensureDomainCreateEnabled = (): void => {
+    if (!config.enableDomainCreate) {
+      throw new Error(
+        'domains_create is disabled by default. Enable it with PORKBUN_ENABLE_DOMAIN_CREATE=true or pass --enable-domain-create.',
       );
     }
   };
@@ -178,11 +186,158 @@ export function createPorkbunServer(config: RuntimeConfig): McpServer {
   );
 
   server.tool(
+    "domains_update_auto_renew",
+    {
+      status: z.enum(["on", "off"]),
+      domain: z.string().min(1).optional(),
+      domains: z.array(z.string().min(1)).min(1).optional(),
+      dry_run: z.boolean().optional(),
+      confirm_apply: z.boolean().optional(),
+    },
+    wrap(async (args) => {
+      ensureWritable("domains_update_auto_renew");
+
+      const dryRun = args.dry_run ?? true;
+      if (!dryRun && !args.confirm_apply) {
+        throw new Error(
+          "domains_update_auto_renew dry_run=false requires confirm_apply=true.",
+        );
+      }
+
+      const hasDomain = typeof args.domain === "string" && args.domain.trim().length > 0;
+      const hasDomains = Array.isArray(args.domains) && args.domains.length > 0;
+      if (!hasDomain && !hasDomains) {
+        throw new Error("domains_update_auto_renew requires domain or domains[].");
+      }
+
+      const plan = {
+        status: "SUCCESS",
+        dry_run: dryRun,
+        action: "update_auto_renew",
+        desired: {
+          status: args.status,
+          domain: args.domain,
+          domains: args.domains,
+        },
+        note:
+          "This tool does not fetch current auto-renew state. It issues an update request to Porkbun.",
+      };
+
+      if (dryRun) {
+        return plan;
+      }
+
+      const response = await client.domainsUpdateAutoRenew({
+        status: args.status,
+        domain: args.domain,
+        domains: args.domain ? undefined : args.domains,
+      });
+
+      return { ...plan, dry_run: false, response };
+    }),
+  );
+
+  server.tool(
+    "domains_create",
+    {
+      domain: z.string().min(1),
+      cost: z.number().int().positive(),
+      agree_to_terms: z.boolean().optional(),
+      dry_run: z.boolean().optional(),
+      confirm_apply: z.boolean().optional(),
+    },
+    wrap(async (args) => {
+      ensureWritable("domains_create");
+      ensureDomainCreateEnabled();
+
+      const dryRun = args.dry_run ?? true;
+      if (!dryRun && !args.confirm_apply) {
+        throw new Error("domains_create dry_run=false requires confirm_apply=true.");
+      }
+
+      // Must be explicitly accepted to reduce accidental registration.
+      if (args.agree_to_terms !== true) {
+        throw new Error("domains_create requires agree_to_terms=true.");
+      }
+
+      const plan = {
+        status: "SUCCESS",
+        dry_run: dryRun,
+        action: "domain_create",
+        domain: args.domain,
+        cost: args.cost,
+        warnings: [
+          "This operation registers a domain and can spend real money.",
+          "Porkbun enforces rate limits and eligibility requirements for API registrations.",
+        ],
+      };
+
+      if (dryRun) {
+        return plan;
+      }
+
+      const response = await client.domainsCreate({
+        domain: args.domain,
+        cost: args.cost,
+        agreeToTerms: "yes",
+      });
+
+      return { ...plan, dry_run: false, response };
+    }),
+  );
+
+  server.tool(
     "domains_get_glue_records",
     {
       domain: z.string().min(1),
     },
     wrap(async (args) => client.domainsGetGlueRecords(args.domain)),
+  );
+
+  server.tool(
+    "domains_create_glue_record",
+    {
+      domain: z.string().min(1),
+      glue_host_subdomain: z.string().min(1),
+      ips: z.array(z.string().min(1)).min(1),
+    },
+    wrap(async (args) => {
+      ensureWritable("domains_create_glue_record");
+      return client.domainsCreateGlueRecord(
+        args.domain,
+        args.glue_host_subdomain,
+        args.ips,
+      );
+    }),
+  );
+
+  server.tool(
+    "domains_update_glue_record",
+    {
+      domain: z.string().min(1),
+      glue_host_subdomain: z.string().min(1),
+      ips: z.array(z.string().min(1)).min(1),
+    },
+    wrap(async (args) => {
+      ensureWritable("domains_update_glue_record");
+      return client.domainsUpdateGlueRecord(
+        args.domain,
+        args.glue_host_subdomain,
+        args.ips,
+      );
+    }),
+  );
+
+  server.tool(
+    "domains_delete_glue_record",
+    {
+      domain: z.string().min(1),
+      glue_host_subdomain: z.string().min(1),
+    },
+    wrap(async (args) => {
+      ensureWritable("domains_delete_glue_record");
+      return client.domainsDeleteGlueRecord(args.domain, args.glue_host_subdomain);
+    }),
   );
 
   server.tool(
@@ -1328,6 +1483,526 @@ export function createPorkbunServer(config: RuntimeConfig): McpServer {
         apply_status: applied.failed.length > 0 ? "partial_success" : "success",
         applied,
       };
+    }),
+  );
+
+  const upsertSingleRecord = async (input: {
+    tool_name: string;
+    domain: string;
+    type: string;
+    subdomain: string;
+    target: {
+      content: string;
+      ttl?: number;
+      prio?: number;
+      notes?: string;
+    };
+    dry_run: boolean;
+  }): Promise<unknown> => {
+    const lookup = await client.dnsGetByNameType(
+      input.domain,
+      input.type,
+      emptyToUndefined(input.subdomain),
+    );
+    const existing = extractDnsRecords(lookup);
+
+    if (existing.length === 0) {
+      const plan = {
+        action: "create",
+        reason: "No matching records found.",
+        desired: {
+          type: input.type,
+          name: input.subdomain,
+          content: input.target.content,
+          ttl: input.target.ttl,
+          prio: input.target.prio,
+          notes: input.target.notes,
+        },
+      };
+
+      if (input.dry_run) {
+        return { status: "SUCCESS", dry_run: true, ...plan };
+      }
+
+      ensureWritable(input.tool_name);
+      const response = await client.dnsCreate({
+        domain: input.domain,
+        type: input.type,
+        name: input.subdomain,
+        content: input.target.content,
+        ttl: input.target.ttl,
+        prio: input.target.prio,
+        notes: input.target.notes,
+      });
+
+      return { status: "SUCCESS", dry_run: false, ...plan, response };
+    }
+
+    if (existing.length > 1) {
+      throw new Error(
+        `${input.tool_name} matched ${existing.length} records for ${input.type} ${input.subdomain || "@"}. Refusing to edit multiple records.`,
+      );
+    }
+
+    const current = existing[0];
+    if (recordsEqual(current, input.target)) {
+      return {
+        status: "SUCCESS",
+        dry_run: input.dry_run,
+        action: "noop",
+        reason: "Record already matches target state.",
+        record: current,
+      };
+    }
+
+    const plan = {
+      action: "edit",
+      record_id: current.id,
+      desired: {
+        type: input.type,
+        name: input.subdomain,
+        content: input.target.content,
+        ttl: input.target.ttl,
+        prio: input.target.prio,
+        notes: input.target.notes,
+      },
+      before: current,
+    };
+
+    if (input.dry_run) {
+      return { status: "SUCCESS", dry_run: true, ...plan };
+    }
+
+    ensureWritable(input.tool_name);
+    const response = await client.dnsEdit({
+      domain: input.domain,
+      recordId: current.id,
+      type: input.type,
+      name: input.subdomain,
+      content: input.target.content,
+      ttl: input.target.ttl,
+      prio: input.target.prio,
+      notes: input.target.notes,
+    });
+
+    const afterState = await client.dnsGetByNameType(
+      input.domain,
+      input.type,
+      emptyToUndefined(input.subdomain),
+    );
+
+    return {
+      status: "SUCCESS",
+      dry_run: false,
+      ...plan,
+      response,
+      after: extractDnsRecords(afterState),
+    };
+  };
+
+  const ensureRecordPresent = async (input: {
+    tool_name: string;
+    domain: string;
+    desired: DesiredDnsRecord;
+    dry_run: boolean;
+  }): Promise<unknown> => {
+    const lookup = await client.dnsGetByNameType(
+      input.domain,
+      input.desired.type,
+      emptyToUndefined(input.desired.subdomain),
+    );
+    const existing = extractDnsRecords(lookup);
+
+    const hasExactMatch = existing.some((record) =>
+      recordMatchesDesired(record, input.desired, input.domain),
+    );
+    if (hasExactMatch) {
+      return {
+        status: "SUCCESS",
+        dry_run: input.dry_run,
+        action: "noop",
+        reason: "Matching record already exists.",
+        desired: input.desired,
+      };
+    }
+
+    const plan = {
+      action: "create",
+      reason: "No exact match found. Will add desired record.",
+      desired: input.desired,
+    };
+
+    if (input.dry_run) {
+      return { status: "SUCCESS", dry_run: true, ...plan };
+    }
+
+    ensureWritable(input.tool_name);
+    const response = await client.dnsCreate({
+      domain: input.domain,
+      type: input.desired.type,
+      name: emptyToUndefined(input.desired.subdomain),
+      content: input.desired.content,
+      ttl: input.desired.ttl,
+      prio: input.desired.prio,
+      notes: input.desired.notes,
+    });
+
+    return { status: "SUCCESS", dry_run: false, ...plan, response };
+  };
+
+  server.tool(
+    "update_server_ip",
+    {
+      domain: z.string().min(1),
+      subdomain: z.string().optional(),
+      ipv4: z.string().min(1),
+      ipv6: z.string().min(1).optional(),
+      ttl: z.number().int().positive().optional(),
+      dry_run: z.boolean().optional(),
+    },
+    wrap(async (args) => {
+      const dryRun = args.dry_run ?? true;
+      const subdomain = normalizeDnsSubdomain(args.subdomain, args.domain);
+
+      const results: unknown[] = [];
+      results.push(
+        await upsertSingleRecord({
+          tool_name: "update_server_ip",
+          domain: args.domain,
+          type: "A",
+          subdomain,
+          target: { content: args.ipv4, ttl: args.ttl },
+          dry_run: dryRun,
+        }),
+      );
+
+      if (args.ipv6) {
+        results.push(
+          await upsertSingleRecord({
+            tool_name: "update_server_ip",
+            domain: args.domain,
+            type: "AAAA",
+            subdomain,
+            target: { content: args.ipv6, ttl: args.ttl },
+            dry_run: dryRun,
+          }),
+        );
+      }
+
+      return { status: "SUCCESS", dry_run: dryRun, domain: args.domain, subdomain, results };
+    }),
+  );
+
+  server.tool(
+    "subdomain_setup",
+    {
+      domain: z.string().min(1),
+      subdomain: z.string().min(1),
+      type: z.enum(["A", "AAAA", "CNAME", "TXT"]),
+      content: z.string().min(1),
+      ttl: z.number().int().positive().optional(),
+      prio: z.number().int().nonnegative().optional(),
+      notes: z.string().optional(),
+      dry_run: z.boolean().optional(),
+    },
+    wrap(async (args) => {
+      const dryRun = args.dry_run ?? true;
+      const subdomain = normalizeDnsSubdomain(args.subdomain, args.domain);
+
+      return upsertSingleRecord({
+        tool_name: "subdomain_setup",
+        domain: args.domain,
+        type: args.type,
+        subdomain,
+        target: {
+          content: args.content,
+          ttl: args.ttl,
+          prio: args.prio,
+          notes: args.notes,
+        },
+        dry_run: dryRun,
+      });
+    }),
+  );
+
+  server.tool(
+    "dns_setup",
+    {
+      domain: z.string().min(1),
+      apex_ipv4: z.string().min(1).optional(),
+      apex_ipv6: z.string().min(1).optional(),
+      www_cname: z.boolean().optional(),
+      www_target: z.string().min(1).optional(),
+      ttl: z.number().int().positive().optional(),
+      dry_run: z.boolean().optional(),
+    },
+    wrap(async (args) => {
+      const dryRun = args.dry_run ?? true;
+      const wwwCname = args.www_cname ?? true;
+
+      if (!args.apex_ipv4 && !args.apex_ipv6 && !wwwCname) {
+        throw new Error(
+          "dns_setup requires at least one change: apex_ipv4, apex_ipv6, or www_cname=true.",
+        );
+      }
+
+      const results: unknown[] = [];
+      if (args.apex_ipv4) {
+        results.push(
+          await upsertSingleRecord({
+            tool_name: "dns_setup",
+            domain: args.domain,
+            type: "A",
+            subdomain: "",
+            target: { content: args.apex_ipv4, ttl: args.ttl },
+            dry_run: dryRun,
+          }),
+        );
+      }
+      if (args.apex_ipv6) {
+        results.push(
+          await upsertSingleRecord({
+            tool_name: "dns_setup",
+            domain: args.domain,
+            type: "AAAA",
+            subdomain: "",
+            target: { content: args.apex_ipv6, ttl: args.ttl },
+            dry_run: dryRun,
+          }),
+        );
+      }
+      if (wwwCname) {
+        const target = (args.www_target ?? args.domain).trim();
+        results.push(
+          await upsertSingleRecord({
+            tool_name: "dns_setup",
+            domain: args.domain,
+            type: "CNAME",
+            subdomain: "www",
+            target: { content: target, ttl: args.ttl },
+            dry_run: dryRun,
+          }),
+        );
+      }
+
+      return { status: "SUCCESS", dry_run: dryRun, domain: args.domain, results };
+    }),
+  );
+
+  server.tool(
+    "dns_audit",
+    {
+      domain: z.string().min(1),
+    },
+    wrap(async (args) => {
+      const response = await client.dnsList(args.domain);
+      const records = extractDnsRecords(response);
+      const types = summarizeRecordTypes(records);
+
+      const subOf = (record: PorkbunDnsRecord) =>
+        normalizeDnsSubdomain(record.name, args.domain);
+
+      const apex = records.filter((r) => subOf(r) === "");
+      const www = records.filter((r) => subOf(r) === "www");
+
+      const hasApexA = apex.some((r) => r.type.toUpperCase() === "A");
+      const hasApexAAAA = apex.some((r) => r.type.toUpperCase() === "AAAA");
+      const hasApexCname = apex.some((r) => r.type.toUpperCase() === "CNAME");
+      const hasWww = www.some((r) => ["A", "AAAA", "CNAME"].includes(r.type.toUpperCase()));
+      const hasMx = records.some((r) => r.type.toUpperCase() === "MX");
+
+      const rootTxt = records.filter((r) => r.type.toUpperCase() === "TXT" && subOf(r) === "");
+      const dmarcTxt = records.filter(
+        (r) => r.type.toUpperCase() === "TXT" && subOf(r) === "_dmarc",
+      );
+      const hasSpf = rootTxt.some((r) => r.content.trim().toLowerCase().startsWith("v=spf1"));
+      const hasDmarc = dmarcTxt.some((r) => r.content.trim().toLowerCase().startsWith("v=dmarc1"));
+
+      const warnings: string[] = [];
+      const recommendations: string[] = [];
+
+      if (!hasApexA && !hasApexAAAA && !hasApexCname) {
+        warnings.push("No apex A/AAAA/CNAME record detected. Web may not resolve.");
+        recommendations.push("Add an apex A or AAAA record (or a CNAME if appropriate).");
+      }
+      if (!hasWww) {
+        warnings.push('No "www" A/AAAA/CNAME record detected.');
+        recommendations.push('Add a "www" CNAME or A record if you intend to use www.');
+      }
+      if (!hasMx) {
+        recommendations.push("If you use email on this domain, configure MX and SPF records.");
+      }
+      if (hasMx && !hasSpf) {
+        warnings.push("MX records exist but no SPF TXT record detected at root.");
+      }
+      if (hasMx && !hasDmarc) {
+        recommendations.push("Consider adding a DMARC record (_dmarc TXT).");
+      }
+
+      const overall: HealthCheckStatus = warnings.length > 0 ? "warning" : "ok";
+      return {
+        status: "SUCCESS",
+        domain: args.domain,
+        overall,
+        dns: {
+          count: records.length,
+          types,
+          apex: { has_a: hasApexA, has_aaaa: hasApexAAAA, has_cname: hasApexCname },
+          www: { present: hasWww },
+          email: { has_mx: hasMx, has_spf: hasSpf, has_dmarc: hasDmarc },
+        },
+        warnings,
+        recommendations,
+      };
+    }),
+  );
+
+  server.tool(
+    "email_dns_setup",
+    {
+      domain: z.string().min(1),
+      provider: z.enum(["google_workspace", "protonmail", "custom"]),
+      custom_records: z
+        .array(
+          z
+            .object({
+              type: z.string().min(1),
+              subdomain: z.string().optional(),
+              content: z.string().min(1),
+              ttl: z.number().int().positive().optional(),
+              prio: z.number().int().nonnegative().optional(),
+              notes: z.string().optional(),
+            })
+            .strict(),
+        )
+        .optional(),
+      ttl: z.number().int().positive().optional(),
+      confirm_apply: z.boolean().optional(),
+      dry_run: z.boolean().optional(),
+    },
+    wrap(async (args) => {
+      const dryRun = args.dry_run ?? true;
+
+      const desired: DesiredDnsRecord[] = [];
+      if (args.provider === "google_workspace") {
+        desired.push(
+          normalizeDesiredDnsRecord(
+            { type: "MX", subdomain: "", content: "ASPMX.L.GOOGLE.COM", prio: 1, ttl: args.ttl },
+            args.domain,
+          ),
+          normalizeDesiredDnsRecord(
+            { type: "MX", subdomain: "", content: "ALT1.ASPMX.L.GOOGLE.COM", prio: 5, ttl: args.ttl },
+            args.domain,
+          ),
+          normalizeDesiredDnsRecord(
+            { type: "MX", subdomain: "", content: "ALT2.ASPMX.L.GOOGLE.COM", prio: 5, ttl: args.ttl },
+            args.domain,
+          ),
+          normalizeDesiredDnsRecord(
+            { type: "MX", subdomain: "", content: "ALT3.ASPMX.L.GOOGLE.COM", prio: 10, ttl: args.ttl },
+            args.domain,
+          ),
+          normalizeDesiredDnsRecord(
+            { type: "MX", subdomain: "", content: "ALT4.ASPMX.L.GOOGLE.COM", prio: 10, ttl: args.ttl },
+            args.domain,
+          ),
+        );
+        desired.push(
+          normalizeDesiredDnsRecord(
+            {
+              type: "TXT",
+              subdomain: "",
+              content: "v=spf1 include:_spf.google.com ~all",
+              ttl: args.ttl,
+            },
+            args.domain,
+          ),
+        );
+      } else if (args.provider === "protonmail") {
+        desired.push(
+          normalizeDesiredDnsRecord(
+            { type: "MX", subdomain: "", content: "mail.protonmail.ch", prio: 10, ttl: args.ttl },
+            args.domain,
+          ),
+          normalizeDesiredDnsRecord(
+            { type: "MX", subdomain: "", content: "mailsec.protonmail.ch", prio: 20, ttl: args.ttl },
+            args.domain,
+          ),
+        );
+        desired.push(
+          normalizeDesiredDnsRecord(
+            {
+              type: "TXT",
+              subdomain: "",
+              content: "v=spf1 include:_spf.protonmail.ch ~all",
+              ttl: args.ttl,
+            },
+            args.domain,
+          ),
+        );
+      } else {
+        if (!args.custom_records || args.custom_records.length === 0) {
+          throw new Error("email_dns_setup provider=custom requires custom_records.");
+        }
+        for (const record of args.custom_records) {
+          desired.push(normalizeDesiredDnsRecord(record, args.domain));
+        }
+      }
+
+      // Safety: avoid silently adding a second SPF record unless explicitly confirmed.
+      const spfDesired = desired.find(
+        (r) => r.type === "TXT" && r.subdomain === "" && r.content.toLowerCase().startsWith("v=spf1"),
+      );
+      if (spfDesired) {
+        const lookup = await client.dnsGetByNameType(args.domain, "TXT", "");
+        const existingTxt = extractDnsRecords(lookup).filter(
+          (r) =>
+            normalizeDnsSubdomain(r.name, args.domain) === "" &&
+            r.content.trim().toLowerCase().startsWith("v=spf1"),
+        );
+        const hasExact = existingTxt.some((r) => r.content.trim() === spfDesired.content.trim());
+        if (!hasExact && existingTxt.length > 0 && !dryRun && !args.confirm_apply) {
+          throw new Error(
+            "SPF record already exists. Refusing to add another without confirm_apply=true.",
+          );
+        }
+      }
+
+      const results: unknown[] = [];
+      for (const record of desired) {
+        // For MX, avoid creating duplicates if the same host already exists with a different priority.
+        if (record.type === "MX") {
+          const lookup = await client.dnsGetByNameType(args.domain, "MX", "");
+          const existing = extractDnsRecords(lookup);
+          const hasSameTarget = existing.some(
+            (r) =>
+              r.type.toUpperCase() === "MX" &&
+              normalizeDnsSubdomain(r.name, args.domain) === "" &&
+              r.content.trim().toLowerCase() === record.content.trim().toLowerCase(),
+          );
+          if (hasSameTarget) {
+            results.push({
+              status: "SUCCESS",
+              dry_run: dryRun,
+              action: "noop",
+              reason: "MX target already exists.",
+              desired: record,
+            });
+            continue;
+          }
+        }
+
+        results.push(
+          await ensureRecordPresent({
+            tool_name: "email_dns_setup",
+            domain: args.domain,
+            desired: record,
+            dry_run: dryRun,
+          }),
+        );
+      }
+
+      return { status: "SUCCESS", provider: args.provider, dry_run: dryRun, results };
     }),
   );
 

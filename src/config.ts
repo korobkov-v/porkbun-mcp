@@ -6,6 +6,7 @@ export interface CliOptions {
   getMuddy: boolean;
   transport: "stdio";
   ipv4OnlyApi: boolean;
+  enableDomainCreate: boolean;
 }
 
 export interface RuntimeConfig {
@@ -13,6 +14,7 @@ export interface RuntimeConfig {
   secretKey: string;
   getMuddy: boolean;
   baseUrl: string;
+  enableDomainCreate: boolean;
 }
 
 export function parseCliOptions(args: string[]): CliOptions {
@@ -21,6 +23,7 @@ export function parseCliOptions(args: string[]): CliOptions {
     getMuddy: false,
     transport: "stdio",
     ipv4OnlyApi: false,
+    enableDomainCreate: false,
   };
 
   for (let index = 0; index < args.length; index += 1) {
@@ -56,6 +59,11 @@ export function parseCliOptions(args: string[]): CliOptions {
       continue;
     }
 
+    if (arg === "--enable-domain-create") {
+      options.enableDomainCreate = true;
+      continue;
+    }
+
     throw new Error(`Unknown argument: ${arg}`);
   }
 
@@ -76,11 +84,15 @@ export function resolveRuntimeConfig(cli: CliOptions): RuntimeConfig {
 
   const baseUrl = cli.ipv4OnlyApi ? IPV4_API_BASE_URL : DEFAULT_API_BASE_URL;
 
+  const enableDomainCreate =
+    cli.enableDomainCreate || toBoolean(process.env.PORKBUN_ENABLE_DOMAIN_CREATE);
+
   return {
     apiKey,
     secretKey,
     getMuddy,
     baseUrl: baseUrl.replace(/\/+$/, ""),
+    enableDomainCreate,
   };
 }
 
@@ -92,6 +104,7 @@ Usage:
 
 Options:
   --get-muddy            Enable write tools
+  --enable-domain-create Enable domain registration tool (dangerous)
   --transport stdio      MCP transport
   --ipv4-only-api        Use api-ipv4.porkbun.com endpoint
   -h, --help             Show this help
@@ -100,6 +113,7 @@ Environment variables:
   PORKBUN_API_KEY        Required
   PORKBUN_SECRET_KEY     Required
   PORKBUN_GET_MUDDY      Optional (true/false)
+  PORKBUN_ENABLE_DOMAIN_CREATE Optional (true/false)
 `;
 
   process.stdout.write(helpText);

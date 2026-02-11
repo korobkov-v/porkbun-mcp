@@ -210,3 +210,75 @@ Output:
 Guardrails:
 - Two-phase flow only: `plan` first, then `apply`.
 - Fail if projected changes exceed `max_changes`.
+
+## Beginner Helper Tools
+
+These tools are convenience wrappers for common workflows. They aim to be safe by default and are designed for first-time operators.
+
+## `dns_audit`
+
+Status:
+- Implemented.
+
+Purpose:
+- Provide a quick read-only DNS snapshot with beginner-friendly warnings (apex, www, email basics).
+
+Risk level:
+- Low (read-only).
+
+## `dns_setup`
+
+Status:
+- Implemented.
+
+Purpose:
+- Quick web DNS setup: apex A/AAAA and optional `www` CNAME.
+
+Risk level:
+- Medium (mutating when `dry_run=false`).
+
+Guardrails:
+- `dry_run` defaults to true.
+
+## `update_server_ip`
+
+Status:
+- Implemented.
+
+Purpose:
+- Update a single host's A (and optional AAAA) record to a new server IP.
+
+Risk level:
+- Medium (mutating when `dry_run=false`).
+
+Guardrails:
+- Refuses to edit when multiple records match the same (type, subdomain).
+
+## `subdomain_setup`
+
+Status:
+- Implemented.
+
+Purpose:
+- Create or edit one DNS record for a specific subdomain (A/AAAA/CNAME/TXT).
+
+Risk level:
+- Medium (mutating when `dry_run=false`).
+
+Guardrails:
+- Refuses to edit when multiple records match the same (type, subdomain).
+
+## `email_dns_setup`
+
+Status:
+- Implemented.
+
+Purpose:
+- Add baseline email DNS for a provider preset (`google_workspace`, `protonmail`) or user-provided records (`custom`).
+
+Risk level:
+- Medium (mutating when `dry_run=false`).
+
+Guardrails:
+- `dry_run` defaults to true.
+- If an SPF record already exists, apply requires `confirm_apply=true` to avoid accidental double-SPF.
