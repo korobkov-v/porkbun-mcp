@@ -23,7 +23,7 @@ const DOMAINS_BULK_CHECK_FALLBACK_DELAY_MS = 11_000;
 export function createPorkbunServer(config: RuntimeConfig): McpServer {
   const server = new McpServer({
     name: "porkbun-mcp",
-    version: "0.3.3",
+    version: "0.3.4",
   });
 
   const client = new PorkbunClient({
