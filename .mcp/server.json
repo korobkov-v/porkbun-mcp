@@ -1,0 +1,37 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.korobkov-v/porkbun-mcp",
+  "title": "Porkbun MCP",
+  "description": "MCP server for Porkbun domains and DNS.",
+  "repository": {
+    "url": "https://github.com/korobkov-v/porkbun-mcp",
+    "source": "github"
+  },
+  "version": "0.3.3",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "porkbun-mcp",
+      "version": "0.3.3",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "PORKBUN_API_KEY",
+          "description": "Porkbun API Key",
+          "isRequired": true,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "PORKBUN_SECRET_KEY",
+          "description": "Porkbun Secret API Key",
+          "isRequired": true,
+          "isSecret": true,
+          "format": "string"
+        }
+      ]
+    }
+  ]
+}

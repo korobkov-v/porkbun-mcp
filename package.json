@@ -1,5 +1,6 @@
 {
   "name": "porkbun-mcp",
+  "mcpName": "io.github.korobkov-v/porkbun-mcp",
   "version": "0.3.3",
   "description": "MCP server for Porkbun, npx-first runtime.",
   "type": "module",
