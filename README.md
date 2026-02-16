@@ -72,9 +72,31 @@ node dist/index.js --get-muddy
 node dist/index.js --help
 ```
 
-## MCP Client Config (npx)
+## MCP Client Integrations
 
-Use this in your MCP client config:
+GitHub README does not support native tabs, so this section uses collapsible "tab-like" blocks.
+If you later move docs to a docs site (Docusaurus/Nextra), you can reuse the same snippets as real tabs.
+
+### Base server snippet (safe read-only)
+
+```json
+{
+  "porkbun-mcp": {
+    "command": "npx",
+    "args": ["-y", "porkbun-mcp"],
+    "env": {
+      "PORKBUN_API_KEY": "your_porkbun_api_key",
+      "PORKBUN_SECRET_KEY": "your_porkbun_secret_api_key"
+    }
+  }
+}
+```
+
+<details>
+<summary><strong>Cursor</strong></summary>
+
+Add an MCP server in Cursor settings and paste the snippet above as a server config.
+If your setup expects an outer object, wrap it into:
 
 ```json
 {
@@ -91,7 +113,53 @@ Use this in your MCP client config:
 }
 ```
 
-Write mode with `npx`:
+</details>
+
+<details>
+<summary><strong>Claude Desktop (macOS)</strong></summary>
+
+Update `~/Library/Application Support/Claude/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "porkbun-mcp": {
+      "command": "npx",
+      "args": ["-y", "porkbun-mcp"],
+      "env": {
+        "PORKBUN_API_KEY": "your_porkbun_api_key",
+        "PORKBUN_SECRET_KEY": "your_porkbun_secret_api_key"
+      }
+    }
+  }
+}
+```
+
+</details>
+
+<details>
+<summary><strong>Other MCP clients (Windsurf, Cline, etc.)</strong></summary>
+
+Most clients use the same `mcpServers` shape:
+
+```json
+{
+  "mcpServers": {
+    "porkbun-mcp": {
+      "command": "npx",
+      "args": ["-y", "porkbun-mcp"],
+      "env": {
+        "PORKBUN_API_KEY": "your_porkbun_api_key",
+        "PORKBUN_SECRET_KEY": "your_porkbun_secret_api_key"
+      }
+    }
+  }
+}
+```
+
+</details>
+
+### Write mode with `npx`
 
 ```json
 {
@@ -108,7 +176,7 @@ Write mode with `npx`:
 }
 ```
 
-Domain create enabled (dangerous):
+### Domain create enabled (dangerous)
 
 ```json
 {
