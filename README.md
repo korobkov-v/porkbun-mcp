@@ -1,10 +1,11 @@
 # porkbun-mcp
 
-![porkbun-mcp logo](./porkbun-mcp_logo.png)
+![porkbun-mcp logo](porkbun-mcp_logo.png)
 
 MCP server for Porkbun domains and DNS.
 
 Use it from any MCP-compatible client to inspect and manage:
+
 - domains and nameservers
 - DNS records
 - DNSSEC
@@ -12,6 +13,7 @@ Use it from any MCP-compatible client to inspect and manage:
 - URL forwarding
 
 Built for safe operations:
+
 - read-only behavior by default
 - mutating tools require explicit write mode
 - scenario tools default to `dry_run: true`
@@ -33,6 +35,7 @@ This project exposes Porkbun APIs as MCP tools so AI assistants can execute doma
   Account-level keys are not enough if domain-level API access is disabled.
 
 Where to get the keys:
+
 - Log in to Porkbun.
 - Open account settings and go to API Access.
 - Generate/copy:
@@ -194,22 +197,26 @@ Most clients use the same `mcpServers` shape:
 ```
 
 Important (Porkbun API domain registration prerequisites):
+
 - Your Porkbun account must have registered at least one domain in the past (for new accounts, the first purchase may need to be done via the web UI).
 - Your email address and phone number must be verified.
 - You must have enough account credit (API registrations are billed from account credit).
-- `cost` must be provided in pennies and must match the value returned by the domain check (minimum duration * price).
+- `cost` must be provided in pennies and must match the value returned by the domain check (minimum duration \* price).
 - You must explicitly accept terms (`agree_to_terms=true` in this server, which maps to `agreeToTerms="yes"` for Porkbun).
 
 Reference:
+
 - Porkbun API v3 docs (see "Domain Create" and "Domain Check"): https://porkbun.com/api/json/v3/documentation
 
 ## First Successful Call
 
 Once configured in your MCP client, start with:
+
 - `ping`
 - `pricing_get`
 
 Then try one read flow:
+
 - `dns_list` for your domain
 
 Before any write call, run a scenario tool in `dry_run` mode first.
@@ -248,6 +255,7 @@ Without it, the server stays in safe read-only behavior.
 With it, mutating tools are allowed (create/edit/delete/update operations for DNS and domain settings).
 
 Use this mode only when:
+
 - you are ready to apply real infrastructure changes
 - your domain is API-enabled in Porkbun
 - you have already validated the plan with read calls or `dry_run` flows
@@ -261,6 +269,7 @@ Use this mode only when:
 - SSL: certificate bundle retrieval
 
 Scenario tools:
+
 - `dns_query`
 - `dns_upsert`
 - `domain_health_check`
@@ -270,6 +279,7 @@ Scenario tools:
 - `dns_batch_apply`
 
 Beginner helpers:
+
 - `dns_audit`
 - `dns_setup`
 - `email_dns_setup`
