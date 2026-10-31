@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.4.0 - 2026-10-31
+
+- Update MCP SDK to ^1.32.2, Zod to ^4.6.7 and tsx to ^4.23.15; refresh vulnerable transitive dependencies. Full npm audit reports zero known vulnerabilities on 2026-10-31.
+- Verify Zod 4 compatibility: nested strict schemas, collection bounds, optional arguments and safe integers.
+
+- Add opt-in card registration with caller-owned idempotency keys and existing purchase gates.
+- Filter and bound card responses, validate payment links and reject redirects.
+- Preserve uncertain outcomes without retries or credit fallback. Validated with mocked HTTP; no real purchases.
+
 ## 0.3.7 - 2026-10-31
 
 - Reject unknown arguments on all 40 tools to prevent unintended DNS apex operations (#1). Clients must remove undeclared arguments.

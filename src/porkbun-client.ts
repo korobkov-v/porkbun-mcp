@@ -1,3 +1,5 @@
+import { cardPurchase, CardPurchaseArgs } from "./card-payment.js";
+
 export type PorkbunApiResponse = Record<string, unknown>;
 
 export interface PorkbunClientOptions {
@@ -8,6 +10,7 @@ export interface PorkbunClientOptions {
 
 interface RequestOptions {
   auth?: boolean;
+  idempotencyKey?: string;
 }
 
 type EndpointPart = string | number | undefined | null;
@@ -123,11 +126,16 @@ export class PorkbunClient {
     domain: string;
     cost: number;
     agreeToTerms: "yes" | "1";
+    idempotencyKey?: string;
   }): Promise<PorkbunApiResponse> {
     return this.post(this.endpoint("domain", "create", args.domain), {
       cost: args.cost,
       agreeToTerms: args.agreeToTerms,
-    });
+    }, { idempotencyKey: args.idempotencyKey });
+  }
+
+  async domainsCreateCard(args: CardPurchaseArgs): Promise<PorkbunApiResponse> {
+    return cardPurchase(this.baseUrl, this.apiKey, this.secretKey, args);
   }
 
   async domainsGetGlueRecords(domain: string): Promise<PorkbunApiResponse> {
@@ -366,6 +374,7 @@ export class PorkbunClient {
         method: "POST",
         headers: {
           "content-type": "application/json",
+          ...(options.idempotencyKey ? { "Idempotency-Key": options.idempotencyKey } : {}),
         },
         body: JSON.stringify(requestPayload),
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),

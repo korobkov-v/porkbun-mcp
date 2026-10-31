@@ -385,9 +385,12 @@ export function createPorkbunServer(config: RuntimeConfig): McpServer {
 
   server.registerTool(
     "domains_create",
-    { description: "Register a domain. cost is integer US cents matching the current quote. dry_run defaults to true and makes no API call; execution requires dry_run=false, confirm_apply=true, agree_to_terms=true, write mode and domain-create enablement.", inputSchema: z.object({
+    { description: "Register a domain. cost is integer US cents matching the current quote. dry_run defaults to true and makes no API call; execution requires dry_run=false, confirm_apply=true, agree_to_terms=true, write mode and domain-create enablement. Card execution requires a saved caller-generated idempotency_key. Reuse it only for identical retries; use a new key when adding card_payment_id. This tool never pays the link.", inputSchema: z.object({
       domain: z.string().min(1),
       cost: z.number().int().positive(),
+      pay_with: z.literal("card").optional(),
+      card_payment_id: z.string().regex(/^[A-Za-z0-9_-]{1,255}$/).optional(),
+      idempotency_key: z.string().regex(/^[A-Za-z0-9_-]{16,128}$/).optional(),
       agree_to_terms: z.boolean().optional(),
       dry_run: z.boolean().optional(),
       confirm_apply: z.boolean().optional(),
@@ -396,6 +399,8 @@ export function createPorkbunServer(config: RuntimeConfig): McpServer {
       ensureWritable("domains_create");
       ensureDomainCreateEnabled();
 
+      if (args.card_payment_id && args.pay_with !== "card") throw new Error("card_payment_id requires pay_with=card.");
+      if (args.pay_with === "card" && args.dry_run === false && !args.idempotency_key) throw new Error("Card execution requires a caller-generated idempotency_key saved BEFORE sending. Reuse it only for an identical request; use a new key when adding card_payment_id.");
       const dryRun = args.dry_run ?? true;
       if (!dryRun && !args.confirm_apply) {
         throw new Error("domains_create dry_run=false requires confirm_apply=true.");
@@ -412,6 +417,8 @@ export function createPorkbunServer(config: RuntimeConfig): McpServer {
         action: "domain_create",
         domain: args.domain,
         cost: args.cost,
+        pay_with: args.pay_with,
+        idempotency_key: args.idempotency_key,
         warnings: [
           "This operation registers a domain and can spend real money.",
           "Porkbun enforces rate limits and eligibility requirements for API registrations.",
@@ -422,30 +429,11 @@ export function createPorkbunServer(config: RuntimeConfig): McpServer {
         return plan;
       }
 
-      let response: unknown;
-      try {
-        response = await client.domainsCreate({
-          domain: args.domain,
-          cost: args.cost,
-          agreeToTerms: "yes",
-        });
-      } catch (error) {
-        const message = toMessage(error);
-        throw new Error(
-          [
-            message,
-            "",
-            "Porkbun API domain registration prerequisites (per official docs):",
-            "- Your account must have registered at least one domain in the past (new accounts may need to buy the first domain via the web UI).",
-            "- Your email address and phone number must be verified.",
-            "- You must have enough account credit (API registrations are billed from account credit).",
-            "- `cost` must be in pennies and must match the value returned by Domain Check (minimum duration * price).",
-            "- You must accept terms (this tool requires `agree_to_terms=true`).",
-            "",
-            "Docs: https://porkbun.com/api/json/v3/documentation",
-          ].join("\n"),
-        );
+      if (args.pay_with === "card") {
+        return client.domainsCreateCard({domain: args.domain, cost: args.cost,
+          cardPaymentId: args.card_payment_id, idempotencyKey: args.idempotency_key!});
       }
+      const response = await client.domainsCreate({domain: args.domain, cost: args.cost, agreeToTerms: "yes", idempotencyKey: args.idempotency_key});
 
       return { ...plan, dry_run: false, response };
     }),

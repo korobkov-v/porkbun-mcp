@@ -1,3 +1,5 @@
+import { CardPaymentError } from "./card-payment.js";
+
 type TextContent = {
   type: "text";
   text: string;
@@ -28,7 +30,7 @@ export function errorResult(error: unknown): ToolResult {
     content: [
       {
         type: "text",
-        text: message,
+        text: error instanceof CardPaymentError ? pretty(error.details) : message,
       },
     ],
   };
