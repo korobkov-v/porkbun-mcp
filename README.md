@@ -387,3 +387,32 @@ For `dns_get_by_name_type`, `dns_edit_by_name_type`, and `dns_delete_by_name_typ
 The default `dry_run: true` only returns a local plan and does not check availability or price with Porkbun. Execution requires `dry_run: false`, `confirm_apply: true`, `agree_to_terms: true`, write mode and domain-create enablement.
 
 Run `npm test` for MCP regression checks with mocked HTTP and no real purchases.
+
+
+### Card payment (0.4.0)
+
+Use `pay_with: "card"` on `domains_create`. Before a live call, generate and save
+`idempotency_key` (16–128 ASCII letters, digits, underscores or hyphens; UUIDs work).
+The caller must retain the exact request and key across restarts. No durable server
+ledger or automatic key generation is provided. Dry-run stays local and defaults
+to true. Existing write, registration, terms and confirmation gates still apply.
+
+A 402 returns a flat `PAYMENT_REQUIRED` result with `payUrl`, `cardPaymentId` and
+`expiresAt`. The account holder approves the exact purchase in an external MPP
+wallet. This server never pays links or switches to credit. Treat the URL and
+payment id as sensitive and avoid sharing histories containing them.
+
+After authorization, repeat the purchase with `card_payment_id`, explicit card
+mode and a NEW saved key because the body changed. Identical retries, including
+after lost responses, use the original key. Porkbun documents a 24-hour replay
+window; reconcile older or uncertain requests before attempting another purchase.
+
+Timeouts and malformed responses report unknown outcome, never an invented no-charge
+result. Card responses use an allowlist; raw messages, arbitrary fields and card
+details are omitted. Only explicit payment booleans are retained on API errors.
+Responses are capped at 64 KiB, redirects refused, and payment URLs restricted to
+HTTPS on porkbun.com under /pay/, without credentials, query or fragment. Unsupported
+shapes fail closed. Existing credit calls retain their response wrapper.
+
+Official contract: https://porkbun.com/llms/guides/pay-with-card-mpp
+Validation uses mocked HTTP only; no live payments were made.
