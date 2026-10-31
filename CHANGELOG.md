@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.3.7 - 2026-10-31
+
+- Reject unknown arguments on all 40 tools to prevent unintended DNS apex operations (#1). Clients must remove undeclared arguments.
+- Read the MCP server version from package.json (#1).
+- Send registration cost as integer cents and document the local dry-run default (#2).
+- Add regression checks using mocked HTTP, including write and registration gates.
+- Card payments (#3) are deferred and are not included in this release.
+
 ## 0.3.0 - 2026-02-10
 
 ### Added

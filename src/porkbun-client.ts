@@ -125,7 +125,7 @@ export class PorkbunClient {
     agreeToTerms: "yes" | "1";
   }): Promise<PorkbunApiResponse> {
     return this.post(this.endpoint("domain", "create", args.domain), {
-      cost: String(args.cost),
+      cost: args.cost,
       agreeToTerms: args.agreeToTerms,
     });
   }

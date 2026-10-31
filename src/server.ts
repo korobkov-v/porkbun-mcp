@@ -1,5 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import { createRequire } from "node:module";
 import { domainToASCII } from "node:url";
 
 import type { RuntimeConfig } from "./config.js";
@@ -23,7 +24,7 @@ const DOMAINS_BULK_CHECK_FALLBACK_DELAY_MS = 11_000;
 export function createPorkbunServer(config: RuntimeConfig): McpServer {
   const server = new McpServer({
     name: "porkbun-mcp",
-    version: "0.3.4",
+    version: createRequire(import.meta.url)("../package.json").version,
   });
 
   const client = new PorkbunClient({
@@ -65,21 +66,24 @@ export function createPorkbunServer(config: RuntimeConfig): McpServer {
       }
     };
 
-  server.tool("ping", {}, wrap(async () => client.ping()));
+  server.registerTool(
+    "ping",
+    { inputSchema: z.object({}).strict() },
+    wrap(async () => client.ping()));
 
-  server.tool(
+  server.registerTool(
     "pricing_get",
-    {},
+    { inputSchema: z.object({}).strict() },
     wrap(async () => client.pricingGet()),
   );
 
-  server.tool(
+  server.registerTool(
     "domains_list",
-    {
+    { inputSchema: z.object({
       start: z.number().int().nonnegative().optional(),
       include_labels: z.boolean().optional(),
       fetch_all: z.boolean().optional(),
-    },
+    }).strict() },
     wrap(async (args) => {
       const fetchAll = args.fetch_all ?? true;
       const start = args.start ?? 0;
@@ -116,44 +120,44 @@ export function createPorkbunServer(config: RuntimeConfig): McpServer {
     }),
   );
 
-  server.tool(
+  server.registerTool(
     "domains_get_nameservers",
-    {
+    { inputSchema: z.object({
       domain: z.string().min(1),
-    },
+    }).strict() },
     wrap(async (args) => client.domainsGetNameservers(args.domain)),
   );
 
-  server.tool(
+  server.registerTool(
     "domains_update_nameservers",
-    {
+    { inputSchema: z.object({
       domain: z.string().min(1),
       nameservers: z.array(z.string().min(1)).min(1),
-    },
+    }).strict() },
     wrap(async (args) => {
       ensureWritable("domains_update_nameservers");
       return client.domainsUpdateNameservers(args.domain, args.nameservers);
     }),
   );
 
-  server.tool(
+  server.registerTool(
     "domains_get_url_forwards",
-    {
+    { inputSchema: z.object({
       domain: z.string().min(1),
-    },
+    }).strict() },
     wrap(async (args) => client.domainsGetUrlForwards(args.domain)),
   );
 
-  server.tool(
+  server.registerTool(
     "domains_add_url_forward",
-    {
+    { inputSchema: z.object({
       domain: z.string().min(1),
       location: z.string().min(1),
       subdomain: z.string().optional(),
       type: z.enum(["temporary", "permanent"]).optional(),
       include_path: z.boolean().optional(),
       wildcard: z.boolean().optional(),
-    },
+    }).strict() },
     wrap(async (args) => {
       ensureWritable("domains_add_url_forward");
       return client.domainsAddUrlForward({
@@ -167,36 +171,36 @@ export function createPorkbunServer(config: RuntimeConfig): McpServer {
     }),
   );
 
-  server.tool(
+  server.registerTool(
     "domains_delete_url_forward",
-    {
+    { inputSchema: z.object({
       domain: z.string().min(1),
       record_id: z.string().min(1),
-    },
+    }).strict() },
     wrap(async (args) => {
       ensureWritable("domains_delete_url_forward");
       return client.domainsDeleteUrlForward(args.domain, args.record_id);
     }),
   );
 
-  server.tool(
+  server.registerTool(
     "domains_check_availability",
-    {
+    { inputSchema: z.object({
       domain: z.string().min(1),
-    },
+    }).strict() },
     wrap(async (args) => client.domainsCheckAvailability(args.domain)),
   );
 
-  server.tool(
+  server.registerTool(
     "domains_check_bulk",
-    {
+    { inputSchema: z.object({
       domains: z.array(z.string().min(1)).min(1).max(DOMAINS_BULK_CHECK_MAX),
       concurrency: z.number().int().positive().max(10).optional(),
       delay_ms: z.number().int().nonnegative().max(60_000).optional(),
       respect_limits: z.boolean().optional(),
       stop_on_error: z.boolean().optional(),
       stop_on_rate_limit: z.boolean().optional(),
-    },
+    }).strict() },
     wrap(async (args) => {
       const concurrency = args.concurrency ?? 1;
       const delayMs = args.delay_ms ?? DOMAINS_BULK_CHECK_FALLBACK_DELAY_MS;
@@ -327,15 +331,15 @@ export function createPorkbunServer(config: RuntimeConfig): McpServer {
     }),
   );
 
-  server.tool(
+  server.registerTool(
     "domains_update_auto_renew",
-    {
+    { inputSchema: z.object({
       status: z.enum(["on", "off"]),
       domain: z.string().min(1).optional(),
       domains: z.array(z.string().min(1)).min(1).optional(),
       dry_run: z.boolean().optional(),
       confirm_apply: z.boolean().optional(),
-    },
+    }).strict() },
     wrap(async (args) => {
       ensureWritable("domains_update_auto_renew");
 
@@ -379,15 +383,15 @@ export function createPorkbunServer(config: RuntimeConfig): McpServer {
     }),
   );
 
-  server.tool(
+  server.registerTool(
     "domains_create",
-    {
+    { description: "Register a domain. cost is integer US cents matching the current quote. dry_run defaults to true and makes no API call; execution requires dry_run=false, confirm_apply=true, agree_to_terms=true, write mode and domain-create enablement.", inputSchema: z.object({
       domain: z.string().min(1),
       cost: z.number().int().positive(),
       agree_to_terms: z.boolean().optional(),
       dry_run: z.boolean().optional(),
       confirm_apply: z.boolean().optional(),
-    },
+    }).strict() },
     wrap(async (args) => {
       ensureWritable("domains_create");
       ensureDomainCreateEnabled();
@@ -447,21 +451,21 @@ export function createPorkbunServer(config: RuntimeConfig): McpServer {
     }),
   );
 
-  server.tool(
+  server.registerTool(
     "domains_get_glue_records",
-    {
+    { inputSchema: z.object({
       domain: z.string().min(1),
-    },
+    }).strict() },
     wrap(async (args) => client.domainsGetGlueRecords(args.domain)),
   );
 
-  server.tool(
+  server.registerTool(
     "domains_create_glue_record",
-    {
+    { inputSchema: z.object({
       domain: z.string().min(1),
       glue_host_subdomain: z.string().min(1),
       ips: z.array(z.string().min(1)).min(1),
-    },
+    }).strict() },
     wrap(async (args) => {
       ensureWritable("domains_create_glue_record");
       return client.domainsCreateGlueRecord(
@@ -472,13 +476,13 @@ export function createPorkbunServer(config: RuntimeConfig): McpServer {
     }),
   );
 
-  server.tool(
+  server.registerTool(
     "domains_update_glue_record",
-    {
+    { inputSchema: z.object({
       domain: z.string().min(1),
       glue_host_subdomain: z.string().min(1),
       ips: z.array(z.string().min(1)).min(1),
-    },
+    }).strict() },
     wrap(async (args) => {
       ensureWritable("domains_update_glue_record");
       return client.domainsUpdateGlueRecord(
@@ -489,50 +493,50 @@ export function createPorkbunServer(config: RuntimeConfig): McpServer {
     }),
   );
 
-  server.tool(
+  server.registerTool(
     "domains_delete_glue_record",
-    {
+    { inputSchema: z.object({
       domain: z.string().min(1),
       glue_host_subdomain: z.string().min(1),
-    },
+    }).strict() },
     wrap(async (args) => {
       ensureWritable("domains_delete_glue_record");
       return client.domainsDeleteGlueRecord(args.domain, args.glue_host_subdomain);
     }),
   );
 
-  server.tool(
+  server.registerTool(
     "dns_list",
-    {
+    { inputSchema: z.object({
       domain: z.string().min(1),
-    },
+    }).strict() },
     wrap(async (args) => client.dnsList(args.domain)),
   );
 
-  server.tool(
+  server.registerTool(
     "dns_get",
-    {
+    { inputSchema: z.object({
       domain: z.string().min(1),
       record_id: z.string().min(1),
-    },
+    }).strict() },
     wrap(async (args) => client.dnsGet(args.domain, args.record_id)),
   );
 
-  server.tool(
+  server.registerTool(
     "dns_get_by_name_type",
-    {
+    { inputSchema: z.object({
       domain: z.string().min(1),
       type: z.string().min(1),
       subdomain: z.string().optional(),
-    },
+    }).strict() },
     wrap(async (args) =>
       client.dnsGetByNameType(args.domain, args.type, args.subdomain),
     ),
   );
 
-  server.tool(
+  server.registerTool(
     "dns_create",
-    {
+    { inputSchema: z.object({
       domain: z.string().min(1),
       type: z.string().min(1),
       content: z.string().min(1),
@@ -540,16 +544,16 @@ export function createPorkbunServer(config: RuntimeConfig): McpServer {
       ttl: z.number().int().positive().optional(),
       prio: z.number().int().nonnegative().optional(),
       notes: z.string().optional(),
-    },
+    }).strict() },
     wrap(async (args) => {
       ensureWritable("dns_create");
       return client.dnsCreate(args);
     }),
   );
 
-  server.tool(
+  server.registerTool(
     "dns_edit",
-    {
+    { inputSchema: z.object({
       domain: z.string().min(1),
       record_id: z.string().min(1),
       type: z.string().min(1),
@@ -558,7 +562,7 @@ export function createPorkbunServer(config: RuntimeConfig): McpServer {
       ttl: z.number().int().positive().optional(),
       prio: z.number().int().nonnegative().optional(),
       notes: z.string().optional(),
-    },
+    }).strict() },
     wrap(async (args) => {
       ensureWritable("dns_edit");
       return client.dnsEdit({
@@ -574,9 +578,9 @@ export function createPorkbunServer(config: RuntimeConfig): McpServer {
     }),
   );
 
-  server.tool(
+  server.registerTool(
     "dns_edit_by_name_type",
-    {
+    { inputSchema: z.object({
       domain: z.string().min(1),
       type: z.string().min(1),
       content: z.string().min(1),
@@ -584,7 +588,7 @@ export function createPorkbunServer(config: RuntimeConfig): McpServer {
       ttl: z.number().int().positive().optional(),
       prio: z.number().int().nonnegative().optional(),
       notes: z.string().optional(),
-    },
+    }).strict() },
     wrap(async (args) => {
       ensureWritable("dns_edit_by_name_type");
       return client.dnsEditByNameType({
@@ -599,42 +603,42 @@ export function createPorkbunServer(config: RuntimeConfig): McpServer {
     }),
   );
 
-  server.tool(
+  server.registerTool(
     "dns_delete",
-    {
+    { inputSchema: z.object({
       domain: z.string().min(1),
       record_id: z.string().min(1),
-    },
+    }).strict() },
     wrap(async (args) => {
       ensureWritable("dns_delete");
       return client.dnsDelete(args.domain, args.record_id);
     }),
   );
 
-  server.tool(
+  server.registerTool(
     "dns_delete_by_name_type",
-    {
+    { inputSchema: z.object({
       domain: z.string().min(1),
       type: z.string().min(1),
       subdomain: z.string().optional(),
-    },
+    }).strict() },
     wrap(async (args) => {
       ensureWritable("dns_delete_by_name_type");
       return client.dnsDeleteByNameType(args.domain, args.type, args.subdomain);
     }),
   );
 
-  server.tool(
+  server.registerTool(
     "dnssec_list",
-    {
+    { inputSchema: z.object({
       domain: z.string().min(1),
-    },
+    }).strict() },
     wrap(async (args) => client.dnssecList(args.domain)),
   );
 
-  server.tool(
+  server.registerTool(
     "dnssec_create",
-    {
+    { inputSchema: z.object({
       domain: z.string().min(1),
       key_tag: z.number().int().nonnegative(),
       alg: z.string().min(1),
@@ -645,7 +649,7 @@ export function createPorkbunServer(config: RuntimeConfig): McpServer {
       key_data_protocol: z.string().optional(),
       key_data_algo: z.string().optional(),
       key_data_pub_key: z.string().optional(),
-    },
+    }).strict() },
     wrap(async (args) => {
       ensureWritable("dnssec_create");
       return client.dnssecCreate({
@@ -663,29 +667,29 @@ export function createPorkbunServer(config: RuntimeConfig): McpServer {
     }),
   );
 
-  server.tool(
+  server.registerTool(
     "dnssec_delete",
-    {
+    { inputSchema: z.object({
       domain: z.string().min(1),
       key_tag: z.number().int().nonnegative(),
-    },
+    }).strict() },
     wrap(async (args) => {
       ensureWritable("dnssec_delete");
       return client.dnssecDelete(args.domain, args.key_tag);
     }),
   );
 
-  server.tool(
+  server.registerTool(
     "ssl_retrieve",
-    {
+    { inputSchema: z.object({
       domain: z.string().min(1),
-    },
+    }).strict() },
     wrap(async (args) => client.sslRetrieve(args.domain)),
   );
 
-  server.tool(
+  server.registerTool(
     "dns_query",
-    {
+    { inputSchema: z.object({
       domain: z.string().min(1),
       selector: z
         .object({
@@ -694,7 +698,7 @@ export function createPorkbunServer(config: RuntimeConfig): McpServer {
           subdomain: z.string().optional(),
         })
         .strict(),
-    },
+    }).strict() },
     wrap(async (args) => {
       const hasRecordId = !!args.selector.record_id;
       const hasTypeSelector = !!args.selector.type;
@@ -728,15 +732,15 @@ export function createPorkbunServer(config: RuntimeConfig): McpServer {
     }),
   );
 
-  server.tool(
+  server.registerTool(
     "domain_health_check",
-    {
+    { inputSchema: z.object({
       domain: z.string().min(1),
       checks: z
         .array(z.enum(["ns", "dns", "dnssec", "ssl", "forwards"]))
         .min(1)
         .optional(),
-    },
+    }).strict() },
     wrap(async (args) => {
       const checks: HealthCheckName[] = args.checks ?? [
         "ns",
@@ -886,9 +890,9 @@ export function createPorkbunServer(config: RuntimeConfig): McpServer {
     }),
   );
 
-  server.tool(
+  server.registerTool(
     "dns_upsert",
-    {
+    { inputSchema: z.object({
       domain: z.string().min(1),
       match: z
         .object({
@@ -906,7 +910,7 @@ export function createPorkbunServer(config: RuntimeConfig): McpServer {
         .strict(),
       allow_multi: z.boolean().optional(),
       dry_run: z.boolean().optional(),
-    },
+    }).strict() },
     wrap(async (args) => {
       const dryRun = args.dry_run ?? true;
       const allowMulti = args.allow_multi ?? false;
@@ -1022,9 +1026,9 @@ export function createPorkbunServer(config: RuntimeConfig): McpServer {
     }),
   );
 
-  server.tool(
+  server.registerTool(
     "dns_remove",
-    {
+    { inputSchema: z.object({
       domain: z.string().min(1),
       selector: z
         .object({
@@ -1035,7 +1039,7 @@ export function createPorkbunServer(config: RuntimeConfig): McpServer {
         .strict(),
       max_delete: z.number().int().positive().optional(),
       dry_run: z.boolean().optional(),
-    },
+    }).strict() },
     wrap(async (args) => {
       const dryRun = args.dry_run ?? true;
       const maxDelete = args.max_delete ?? 1;
@@ -1109,9 +1113,9 @@ export function createPorkbunServer(config: RuntimeConfig): McpServer {
     }),
   );
 
-  server.tool(
+  server.registerTool(
     "domain_redirect_ensure",
-    {
+    { inputSchema: z.object({
       domain: z.string().min(1),
       desired: z
         .array(
@@ -1129,7 +1133,7 @@ export function createPorkbunServer(config: RuntimeConfig): McpServer {
       strategy: z.enum(["merge", "replace"]).optional(),
       confirm_replace: z.boolean().optional(),
       dry_run: z.boolean().optional(),
-    },
+    }).strict() },
     wrap(async (args) => {
       const dryRun = args.dry_run ?? true;
       const strategy: ReconcileStrategy = args.strategy ?? "merge";
@@ -1232,9 +1236,9 @@ export function createPorkbunServer(config: RuntimeConfig): McpServer {
     }),
   );
 
-  server.tool(
+  server.registerTool(
     "domain_cutover_web",
-    {
+    { inputSchema: z.object({
       domain: z.string().min(1),
       target_records: z
         .array(
@@ -1254,7 +1258,7 @@ export function createPorkbunServer(config: RuntimeConfig): McpServer {
       verify: z.boolean().optional(),
       allow_multi: z.boolean().optional(),
       dry_run: z.boolean().optional(),
-    },
+    }).strict() },
     wrap(async (args) => {
       const dryRun = args.dry_run ?? true;
       const verify = args.verify ?? true;
@@ -1452,9 +1456,9 @@ export function createPorkbunServer(config: RuntimeConfig): McpServer {
     }),
   );
 
-  server.tool(
+  server.registerTool(
     "dns_batch_apply",
-    {
+    { inputSchema: z.object({
       domain: z.string().min(1),
       desired_records: z
         .array(
@@ -1474,7 +1478,7 @@ export function createPorkbunServer(config: RuntimeConfig): McpServer {
       strategy: z.enum(["merge", "replace"]).optional(),
       max_changes: z.number().int().positive().optional(),
       confirm_apply: z.boolean().optional(),
-    },
+    }).strict() },
     wrap(async (args) => {
       const mode: DnsBatchMode = args.mode ?? "plan";
       const strategy: ReconcileStrategy = args.strategy ?? "merge";
@@ -1811,16 +1815,16 @@ export function createPorkbunServer(config: RuntimeConfig): McpServer {
     return { status: "SUCCESS", dry_run: false, ...plan, response };
   };
 
-  server.tool(
+  server.registerTool(
     "update_server_ip",
-    {
+    { inputSchema: z.object({
       domain: z.string().min(1),
       subdomain: z.string().optional(),
       ipv4: z.string().min(1),
       ipv6: z.string().min(1).optional(),
       ttl: z.number().int().positive().optional(),
       dry_run: z.boolean().optional(),
-    },
+    }).strict() },
     wrap(async (args) => {
       const dryRun = args.dry_run ?? true;
       const subdomain = normalizeDnsSubdomain(args.subdomain, args.domain);
@@ -1854,9 +1858,9 @@ export function createPorkbunServer(config: RuntimeConfig): McpServer {
     }),
   );
 
-  server.tool(
+  server.registerTool(
     "subdomain_setup",
-    {
+    { inputSchema: z.object({
       domain: z.string().min(1),
       subdomain: z.string().min(1),
       type: z.enum(["A", "AAAA", "CNAME", "TXT"]),
@@ -1865,7 +1869,7 @@ export function createPorkbunServer(config: RuntimeConfig): McpServer {
       prio: z.number().int().nonnegative().optional(),
       notes: z.string().optional(),
       dry_run: z.boolean().optional(),
-    },
+    }).strict() },
     wrap(async (args) => {
       const dryRun = args.dry_run ?? true;
       const subdomain = normalizeDnsSubdomain(args.subdomain, args.domain);
@@ -1886,9 +1890,9 @@ export function createPorkbunServer(config: RuntimeConfig): McpServer {
     }),
   );
 
-  server.tool(
+  server.registerTool(
     "dns_setup",
-    {
+    { inputSchema: z.object({
       domain: z.string().min(1),
       apex_ipv4: z.string().min(1).optional(),
       apex_ipv6: z.string().min(1).optional(),
@@ -1896,7 +1900,7 @@ export function createPorkbunServer(config: RuntimeConfig): McpServer {
       www_target: z.string().min(1).optional(),
       ttl: z.number().int().positive().optional(),
       dry_run: z.boolean().optional(),
-    },
+    }).strict() },
     wrap(async (args) => {
       const dryRun = args.dry_run ?? true;
       const wwwCname = args.www_cname ?? true;
@@ -1950,11 +1954,11 @@ export function createPorkbunServer(config: RuntimeConfig): McpServer {
     }),
   );
 
-  server.tool(
+  server.registerTool(
     "dns_audit",
-    {
+    { inputSchema: z.object({
       domain: z.string().min(1),
-    },
+    }).strict() },
     wrap(async (args) => {
       const response = await client.dnsList(args.domain);
       const records = extractDnsRecords(response);
@@ -2018,9 +2022,9 @@ export function createPorkbunServer(config: RuntimeConfig): McpServer {
     }),
   );
 
-  server.tool(
+  server.registerTool(
     "email_dns_setup",
-    {
+    { inputSchema: z.object({
       domain: z.string().min(1),
       provider: z.enum(["google_workspace", "protonmail", "custom"]),
       custom_records: z
@@ -2040,7 +2044,7 @@ export function createPorkbunServer(config: RuntimeConfig): McpServer {
       ttl: z.number().int().positive().optional(),
       confirm_apply: z.boolean().optional(),
       dry_run: z.boolean().optional(),
-    },
+    }).strict() },
     wrap(async (args) => {
       const dryRun = args.dry_run ?? true;
 

@@ -376,3 +376,14 @@ Read [`CONTRIBUTING.md`](CONTRIBUTING.md) before opening a PR.
 ## License
 
 MIT
+
+
+### Strict tool arguments and registration cost
+
+All tools reject undeclared arguments. Calls that previously ignored extra fields now fail validation before contacting Porkbun.
+For `dns_get_by_name_type`, `dns_edit_by_name_type`, and `dns_delete_by_name_type`, use `subdomain`, not `name`. Omit it or pass an empty string to target the zone apex. `dns_create` and `dns_edit` use `name`.
+
+`domains_create.cost` is an integer in US cents matching the current quote.
+The default `dry_run: true` only returns a local plan and does not check availability or price with Porkbun. Execution requires `dry_run: false`, `confirm_apply: true`, `agree_to_terms: true`, write mode and domain-create enablement.
+
+Run `npm test` for MCP regression checks with mocked HTTP and no real purchases.
