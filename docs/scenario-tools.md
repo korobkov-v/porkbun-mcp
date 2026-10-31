@@ -308,3 +308,10 @@ Risk level:
 Guardrails:
 - `dry_run` defaults to true.
 - If an SPF record already exists, apply requires `confirm_apply=true` to avoid accidental double-SPF.
+
+
+## Argument validation (0.3.7)
+
+All tools reject unknown top-level arguments before invoking the handler or API.
+The `*_by_name_type` tools accept `subdomain`; `name` is invalid. An omitted or empty `subdomain` still explicitly selects the zone apex according to the tool schema.
+Registration remains disabled by default, and `domains_create` defaults to a local dry-run plan. Its `cost` is sent as a JSON integer in US cents. Card-payment arguments are not supported in this release.
